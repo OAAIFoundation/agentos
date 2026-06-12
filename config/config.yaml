@@ -1,0 +1,213 @@
+# LLM Provider Configuration
+# Supports all major LLM providers with OpenAI-compatible APIs
+
+providers:
+  # === Major Cloud Providers ===
+
+  openai:
+    base_url: "https://api.openai.com/v1"
+    api_key: "env:OPENAI_API_KEY"
+    # Models: gpt-4o, gpt-4-turbo, gpt-4, gpt-3.5-turbo, etc.
+
+  anthropic:
+    base_url: "https://api.anthropic.com/v1"
+    api_key: "env:ANTHROPIC_API_KEY"
+    # Models: claude-3-opus, claude-3-sonnet, claude-3-haiku, claude-3.5-sonnet
+
+  google:
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+    api_key: "env:GOOGLE_API_KEY"
+    # Models: gemini-1.5-pro, gemini-1.5-flash, gemini-pro
+
+  # === Chinese LLM Providers ===
+
+  deepseek:
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "env:DEEPSEEK_API_KEY"
+    # Models: deepseek-chat, deepseek-coder
+
+  qwen:
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: "env:QWEN_API_KEY"
+    # Models: qwen-turbo, qwen-plus, qwen-max, qwen-coder
+
+  zhipu:
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: "env:ZHIPU_API_KEY"
+    # Models: glm-4, glm-4-air, glm-4-flash
+
+  moonshot:
+    base_url: "https://api.moonshot.cn/v1"
+    api_key: "env:MOONSHOT_API_KEY"
+    # Models: moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k
+
+  baidu:
+    base_url: "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat"
+    api_key: "env:BAIDU_API_KEY"
+    # Models: ernie-4.0-turbo, ernie-3.5-turbo
+
+  minimax:
+    base_url: "https://api.minimax.chat/v1"
+    api_key: "env:MINIMAX_API_KEY"
+    # Models: abab6.5-chat, abab5.5-chat
+
+  # === Open Source & Local ===
+
+  ollama:
+    base_url: "http://localhost:11434/v1"
+    api_key: "ollama"
+    # Models: llama3, mistral, codellama, gemma, etc.
+
+  local_vllm:
+    base_url: "http://127.0.0.1:8000/v1"
+    api_key: "EMPTY"
+    # Models: Any model deployed with vLLM
+
+  lm_studio:
+    base_url: "http://localhost:1234/v1"
+    api_key: "lm-studio"
+    # Models: Any model loaded in LM Studio
+
+  # === Alternative Providers ===
+
+  groq:
+    base_url: "https://api.groq.com/openai/v1"
+    api_key: "env:GROQ_API_KEY"
+    # Models: llama3-70b, mixtral-8x7b (ultra-fast inference)
+
+  together:
+    base_url: "https://api.together.xyz/v1"
+    api_key: "env:TOGETHER_API_KEY"
+    # Models: mixtral, llama3, qwen, etc.
+
+  replicate:
+    base_url: "https://openai-proxy.replicate.com/v1"
+    api_key: "env:REPLICATE_API_TOKEN"
+    # Models: Various open-source models
+
+  cohere:
+    base_url: "https://api.cohere.ai/v1"
+    api_key: "env:COHERE_API_KEY"
+    # Models: command-r-plus, command-r, command
+
+  mistral:
+    base_url: "https://api.mistral.ai/v1"
+    api_key: "env:MISTRAL_API_KEY"
+    # Models: mistral-large, mistral-medium, mistral-small
+
+  perplexity:
+    base_url: "https://api.perplexity.ai"
+    api_key: "env:PERPLEXITY_API_KEY"
+    # Models: llama-3-sonar-large, mixtral-8x7b-instruct
+
+# Routing Rules (first match wins!)
+routes:
+  # === OpenAI Models ===
+
+  # Cost optimization: gpt-4o with keywords -> mini
+  - match_model: "gpt-4o"
+    contains_keywords: ["translate", "summary", "summarize", "polish"]
+    target_provider: "openai"
+    target_model: "gpt-4o-mini"
+
+  # Default gpt-4o stays as-is
+  - match_model: "gpt-4o"
+    target_provider: "openai"
+    target_model: "preserve"
+
+  # Route other gpt-4* to DeepSeek for cost savings
+  - match_model: "gpt-4*"
+    target_provider: "deepseek"
+    target_model: "deepseek-chat"
+
+  # Route gpt-3.5 to DeepSeek
+  - match_model: "gpt-3.5-turbo"
+    target_provider: "deepseek"
+    target_model: "deepseek-chat"
+
+  # === Anthropic Claude Models ===
+
+  - match_model: "claude-3-opus*"
+    target_provider: "anthropic"
+    target_model: "preserve"
+
+  - match_model: "claude-3.5-sonnet*"
+    target_provider: "anthropic"
+    target_model: "preserve"
+
+  - match_model: "claude-3-sonnet*"
+    target_provider: "anthropic"
+    target_model: "preserve"
+
+  - match_model: "claude-3-haiku*"
+    target_provider: "anthropic"
+    target_model: "preserve"
+
+  - match_model: "claude-*"
+    target_provider: "anthropic"
+    target_model: "preserve"
+
+  # === Google Gemini Models ===
+
+  - match_model: "gemini-1.5-pro*"
+    target_provider: "google"
+    target_model: "preserve"
+
+  - match_model: "gemini-1.5-flash*"
+    target_provider: "google"
+    target_model: "preserve"
+
+  - match_model: "gemini-*"
+    target_provider: "google"
+    target_model: "preserve"
+
+  # === Chinese LLM Models ===
+
+  - match_model: "deepseek-*"
+    target_provider: "deepseek"
+    target_model: "preserve"
+
+  - match_model: "qwen-*"
+    target_provider: "qwen"
+    target_model: "preserve"
+
+  - match_model: "glm-*"
+    target_provider: "zhipu"
+    target_model: "preserve"
+
+  - match_model: "moonshot-*"
+    target_provider: "moonshot"
+    target_model: "preserve"
+
+  - match_model: "ernie-*"
+    target_provider: "baidu"
+    target_model: "preserve"
+
+  - match_model: "abab*"
+    target_provider: "minimax"
+    target_model: "preserve"
+
+  # === Open Source Models ===
+
+  - match_model: "llama*"
+    target_provider: "groq"
+    target_model: "preserve"
+
+  - match_model: "mixtral*"
+    target_provider: "groq"
+    target_model: "preserve"
+
+  - match_model: "mistral-*"
+    target_provider: "mistral"
+    target_model: "preserve"
+
+  - match_model: "command-*"
+    target_provider: "cohere"
+    target_model: "preserve"
+
+  # === Fallback ===
+
+  # All unmatched models go to OpenAI
+  - match_model: "*"
+    target_provider: "openai"
+    target_model: "preserve"
