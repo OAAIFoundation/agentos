@@ -211,3 +211,188 @@ routes:
   - match_model: "*"
     target_provider: "openai"
     target_model: "preserve"
+
+# ======================== Privacy Guard Configuration ========================
+# Protects sensitive data with three-layer security:
+# 1. Policy Check: Enforce routing policies based on prompt characteristics
+# 2. Regex Audit: Block or log requests containing sensitive patterns
+# 3. Data Masking: Bidirectional masking of PII in prompts and responses
+
+privacy_guard:
+  enabled: true  # Master switch for all privacy features
+
+  # === 1. Generic Policy Engine with Priority Arbitration ===
+  # Expression-based policy evaluation using rule-engine
+  #
+  # Available context variables:
+  #   - model (str): Model name
+  #   - prompt_length (int): Character count
+  #   - has_attachments (bool): Has images/files
+  #   - attachment_count (int): Number of attachments
+  #   - contains_confidential (bool): Pre-computed regex match
+  #   - contains_injection (bool): Pre-computed regex match
+  #   - contains_credential (bool): Pre-computed regex match
+  #
+  # Operators: ==, !=, <, >, <=, >=, and, or, not
+  #
+  # Priority System:
+  #   - priority (int, optional): Higher number = higher priority (default: 0)
+  #   - When multiple policies match, highest priority wins
+  #   - If priorities are equal, action severity determines order (block > log_and_block > reroute)
+  #   - First matching policy executes and stops evaluation (short-circuit)
+  policies:
+    enabled: true
+    rules:
+      # ================================================================
+      # BASELINE POLICIES (Industry Common Sense Best Practices)
+      # These are predefined policies for common security and cost scenarios.
+      # Users can modify, disable, or delete these policies as needed.
+      # ================================================================
+
+      # 1. Prevent Cost Blowout - Block extremely large prompts
+      - name: "Prevent_Cost_Blowout"
+        priority: 100  # Highest priority - critical cost control
+        condition: "prompt_length > 100000"
+        action:
+          type: "block"
+          message: "Request blocked: Prompt exceeds 100K characters (potential cost blowout)"
+
+      # 2. Prevent Prompt Injection - Block common injection attacks
+      - name: "Prevent_Prompt_Injection"
+        priority: 90  # High priority security rule
+        condition: "contains_injection == true"
+        action:
+          type: "log_and_block"
+          message: "Security Alert: Prompt injection attack detected (ignore previous instructions pattern)"
+
+      # 3. Block API Keys - Prevent leaking AWS or OpenAI keys
+      - name: "Block_API_Keys"
+        priority: 80  # High priority security rule
+        condition: "contains_api_key == true"
+        action:
+          type: "block"
+          message: "Security Alert: API key detected in prompt (AWS AKIA or OpenAI sk-)"
+
+      # 4. Trivial Task Downgrade - Route simple greetings to local models
+      # NOTE: Disabled by default - uncomment to enable cost optimization for simple greetings
+      # - name: "Trivial_Task_Downgrade"
+      #   priority: 50
+      #   condition: "is_trivial_greeting == true"
+      #   action:
+      #     type: "reroute"
+      #     target_provider: "local_vllm"
+      #     target_model: "qwen"
+
+      # ================================================================
+      # --- User Custom Policies Below ---
+      # Add your organization-specific policies here.
+      # Examples:
+      #   - Confidential data routing to on-premise models
+      #   - Department-specific model restrictions
+      #   - Project-specific prompt length limits
+      # ================================================================
+
+      # Example: Route confidential content to local models
+      - name: "Confidential_Content_Routing"
+        priority: 70  # Custom policy priority
+        condition: "contains_confidential == true"
+        action:
+          type: "reroute"
+          target_provider: "local_vllm"
+          target_model: "qwen"
+
+      # Example: Vision model routing
+      - name: "Vision_Model_Routing"
+        priority: 20  # Low priority feature routing
+        condition: "has_attachments == true"
+        action:
+          type: "reroute"
+          target_provider: "openai"
+          target_model: "gpt-4o"
+
+      # Example: Attachment count limit
+      - name: "Attachment_Limit"
+        priority: 60  # Medium priority limit
+        condition: "attachment_count > 5"
+        action:
+          type: "block"
+          message: "Too many attachments (max 5)"
+
+  # === 2. Regex Audit ===
+  # Pattern-based detection and blocking
+  # Actions: block (reject with 400), log (audit log only)
+  regex_audit:
+    enabled: true
+    rules:
+      # Block API keys and tokens
+      - name: "API Key Detection"
+        pattern: "(sk-[a-zA-Z0-9]{20,}|Bearer [a-zA-Z0-9_-]{20,})"
+        action: "block"
+        message: "Request blocked: API key detected in prompt"
+
+      # Block AWS credentials
+      - name: "AWS Credentials"
+        pattern: "(AKIA[0-9A-Z]{16}|aws_secret_access_key)"
+        action: "block"
+        message: "Request blocked: AWS credentials detected"
+
+      # Log internal project codenames (don't block, just audit)
+      - name: "Project Codenames"
+        pattern: "(?i)(project-phoenix|operation-atlas|intel-arc-internal)"
+        action: "log"
+        message: "Audit: Internal project codename detected"
+
+      # Block credit card numbers
+      - name: "Credit Card Numbers"
+        pattern: "\\b(?:\\d{4}[- ]?){3}\\d{4}\\b"
+        action: "block"
+        message: "Request blocked: Credit card number detected"
+
+      # Block SSH private keys
+      - name: "SSH Private Keys"
+        pattern: "-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----"
+        action: "block"
+        message: "Request blocked: Private key detected"
+
+  # === 3. Data Masking (Bidirectional PII Redaction) ===
+  # Masks sensitive data before sending to LLM, unmasks in response
+  # Supports both streaming and non-streaming responses
+  data_masking:
+    enabled: true
+    rules:
+      # Email addresses
+      - name: "Email"
+        pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
+        placeholder_prefix: "[REDACTED_EMAIL_"
+        entity_type: "email"
+
+      # Phone numbers (various formats)
+      - name: "Phone Number"
+        pattern: "\\b(?:\\+?1[-.\\s]?)?\\(?[2-9]\\d{2}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b"
+        placeholder_prefix: "[REDACTED_PHONE_"
+        entity_type: "phone"
+
+      # US Social Security Numbers
+      - name: "SSN"
+        pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+        placeholder_prefix: "[REDACTED_SSN_"
+        entity_type: "ssn"
+
+      # Chinese ID numbers (18 digits)
+      - name: "Chinese ID"
+        pattern: "\\b[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[0-9Xx]\\b"
+        placeholder_prefix: "[REDACTED_CNID_"
+        entity_type: "chinese_id"
+
+      # IP Addresses
+      - name: "IP Address"
+        pattern: "\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b"
+        placeholder_prefix: "[REDACTED_IP_"
+        entity_type: "ip_address"
+
+      # Generic person names (requires NER in production - simplified here)
+      # Note: This is a basic pattern; production should use NLP-based NER
+      - name: "Person Name (Basic)"
+        pattern: "\\b(?:Mr\\.|Mrs\\.|Ms\\.|Dr\\.)\\s+[A-Z][a-z]+(\\s+[A-Z][a-z]+)+\\b"
+        placeholder_prefix: "[REDACTED_NAME_"
+        entity_type: "person_name"

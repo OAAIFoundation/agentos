@@ -21,11 +21,17 @@ from pydantic import BaseModel
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+# Import Privacy Guard (Generic Policy Engine)
+from privacy_guard import GenericPolicyEngine, MaskingContext, PolicyContext, ContextBuilder, create_privacy_guard
+
 # ======================== Configuration ========================
 
 CONFIG_FILE = "config/config.yaml"
 config_data: Dict[str, Any] = {}
 config_lock = asyncio.Lock()
+
+# Privacy Guard instance (Generic Policy Engine, initialized on startup)
+privacy_guard: Optional[GenericPolicyEngine] = None
 
 # ======================== Pydantic Models ========================
 
@@ -85,14 +91,19 @@ async def reload_config():
     """
     Reload configuration with thread safety
     """
-    global config_data
+    global config_data, privacy_guard
     async with config_lock:
         try:
             new_config = load_config()
             config_data = new_config
-            print(f"\n🔄 Configuration reloaded at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # Reinitialize Privacy Guard with new config
+            privacy_guard = create_privacy_guard(config_data)
+
+            print(f"\n[RELOAD] Configuration reloaded at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"   Providers: {len(config_data.get('providers', {}))}")
             print(f"   Routes: {len(config_data.get('routes', []))}")
+            print(f"   Privacy Guard: {'Enabled' if privacy_guard.enabled else 'Disabled'}")
         except Exception as e:
             print(f"[ERROR] Failed to reload config: {str(e)}")
 
@@ -251,13 +262,16 @@ async def proxy_request(
     api_key: str,
     payload: dict,
     stream: bool,
-    provider_type: str = 'openai'
+    provider_type: str = 'openai',
+    masking_context: Optional[MaskingContext] = None,
+    privacy_guard_instance: Optional[PrivacyGuard] = None
 ) -> Any:
     """
     Forward request to target provider
     Supports both streaming and non-streaming responses
     Transparently passes through errors
     Handles provider-specific API formats
+    Supports Privacy Guard unmasking for responses
     """
     # Prepare headers based on provider type
     if provider_type == 'anthropic':
@@ -299,8 +313,49 @@ async def proxy_request(
                         )
 
                     async def stream_generator():
-                        async for chunk in response.aiter_bytes():
-                            yield chunk
+                        """Stream generator with Privacy Guard unmasking support"""
+                        if privacy_guard_instance and masking_context and masking_context.mask_to_original:
+                            # Streaming with unmasking (SSE line-by-line processing)
+                            buffer = b""
+                            async for chunk in response.aiter_bytes():
+                                buffer += chunk
+                                # Process complete lines
+                                while b"\n" in buffer:
+                                    line_bytes, buffer = buffer.split(b"\n", 1)
+                                    line = line_bytes.decode('utf-8', errors='ignore')
+
+                                    if line.startswith("data: ") and line != "data: [DONE]":
+                                        try:
+                                            # Parse SSE data
+                                            data_str = line[6:]
+                                            data = json.loads(data_str)
+
+                                            # Unmask content in response
+                                            if "choices" in data:
+                                                for choice in data["choices"]:
+                                                    if "delta" in choice and "content" in choice["delta"]:
+                                                        original_content = choice["delta"]["content"]
+                                                        unmasked = privacy_guard_instance.unmask_response(
+                                                            original_content,
+                                                            masking_context
+                                                        )
+                                                        choice["delta"]["content"] = unmasked
+
+                                            yield f"data: {json.dumps(data, ensure_ascii=False)}\n".encode('utf-8')
+                                        except Exception as e:
+                                            # If parsing fails, pass through original line
+                                            logger.error(f"SSE unmask error: {e}")
+                                            yield line_bytes + b"\n"
+                                    else:
+                                        yield line_bytes + b"\n"
+
+                            # Flush remaining buffer
+                            if buffer:
+                                yield buffer
+                        else:
+                            # Normal streaming (no unmasking)
+                            async for chunk in response.aiter_bytes():
+                                yield chunk
 
                     return StreamingResponse(
                         stream_generator(),
@@ -323,7 +378,22 @@ async def proxy_request(
 
                 # Handle non-JSON responses gracefully
                 try:
-                    return JSONResponse(content=response.json())
+                    response_data = response.json()
+
+                    # Unmask response if Privacy Guard is enabled
+                    if privacy_guard_instance and masking_context and masking_context.mask_to_original:
+                        # Unmask content in non-streaming response
+                        if "choices" in response_data:
+                            for choice in response_data["choices"]:
+                                if "message" in choice and "content" in choice["message"]:
+                                    original_content = choice["message"]["content"]
+                                    unmasked = privacy_guard_instance.unmask_response(
+                                        original_content,
+                                        masking_context
+                                    )
+                                    choice["message"]["content"] = unmasked
+
+                    return JSONResponse(content=response_data)
                 except ValueError:
                     # Response is not valid JSON
                     raise HTTPException(
@@ -369,14 +439,19 @@ async def startup_event():
     """
     Load configuration on startup and setup file watcher
     """
-    global config_data
+    global config_data, privacy_guard
 
     try:
         config_data = load_config()
+
+        # Initialize Privacy Guard
+        privacy_guard = create_privacy_guard(config_data)
+
         print("\n" + "="*80)
         print("[OK] Configuration loaded successfully")
         print(f"   Providers: {list(config_data.get('providers', {}).keys())}")
         print(f"   Routes: {len(config_data.get('routes', []))}")
+        print(f"   Privacy Guard: {'Enabled' if privacy_guard.enabled else 'Disabled'}")
         print("="*80 + "\n")
 
         # Setup file watcher for hot reload
@@ -530,7 +605,7 @@ async def api_reload_config():
 async def chat_completions(request: Request, body: ChatCompletionRequest):
     """
     OpenAI compatible /v1/chat/completions endpoint
-    Routes requests based on configuration rules
+    Routes requests based on configuration rules with Privacy Guard protection
     """
     # 0. Check for Authorization header
     auth_header = request.headers.get("Authorization")
@@ -540,20 +615,53 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             detail="Missing authorization header"
         )
 
-    # 1. Find matching route
-    routes = config_data.get('routes', [])
-    matched_route = find_matching_route(body.model, body.messages, routes)
+    # ==================== PRIVACY GUARD: Generic Policy Engine ====================
+    # Step 1: Build context from request
+    policy_result = None
+    if privacy_guard and privacy_guard.enabled:
+        # Build context for policy evaluation
+        payload = body.model_dump()
+        context = ContextBuilder.extract_context(payload, format_hint="openai")
 
-    if not matched_route:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No matching route found for model: {body.model}"
-        )
+        # Step 2: Evaluate policies (first match wins)
+        policy_result = privacy_guard.evaluate_policies(context)
 
-    # 2. Extract target configuration
-    target_provider_name = matched_route.get('target_provider')
-    target_model_pattern = matched_route.get('target_model', 'preserve')
-    target_model = resolve_target_model(target_model_pattern, body.model)
+        if policy_result:
+            if policy_result["action"] == "block":
+                raise HTTPException(
+                    status_code=403,
+                    detail=policy_result["message"]
+                )
+            elif policy_result["action"] == "reroute":
+                # Override routing decision
+                print(f"[POLICY] Reroute: {policy_result['target_provider']} / {policy_result['target_model']}")
+
+    # ==================== LEGACY: Regex Audit (Preserved) ====================
+    # Block or log requests with sensitive patterns
+    if privacy_guard and privacy_guard.enabled:
+        messages_dict = [msg.model_dump() for msg in body.messages]
+        privacy_guard.audit_request(messages_dict)  # Raises HTTPException if blocked
+
+    # 1. Find matching route (or use policy override)
+    if policy_result and policy_result.get("action") == "reroute":
+        # Use policy-forced routing
+        target_provider_name = policy_result["target_provider"]
+        target_model = policy_result["target_model"]
+    else:
+        # Normal routing logic
+        routes = config_data.get('routes', [])
+        matched_route = find_matching_route(body.model, body.messages, routes)
+
+        if not matched_route:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No matching route found for model: {body.model}"
+            )
+
+        # 2. Extract target configuration
+        target_provider_name = matched_route.get('target_provider')
+        target_model_pattern = matched_route.get('target_model', 'preserve')
+        target_model = resolve_target_model(target_model_pattern, body.model)
 
     # 3. Get provider configuration
     provider_config = get_provider_config(target_provider_name)
@@ -593,8 +701,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             target_url = base_url
 
     # 6. Log routing decision
-    route_name = matched_route.get('match_model', 'unknown')
-    has_keywords = bool(matched_route.get('contains_keywords'))
+    route_name = target_model if policy_result else body.model
+    has_keywords = False
     log_route_decision(
         body.model,
         target_provider_name,
@@ -603,12 +711,32 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         has_keywords
     )
 
-    # 7. Prepare forwarding payload
-    payload = body.model_dump()
-    payload['model'] = target_model
+    # ==================== PRIVACY GUARD LAYER 3: Data Masking ====================
+    # Mask sensitive data before sending to LLM
+    masking_context = MaskingContext()
+    if privacy_guard and privacy_guard.enabled:
+        messages_dict = [msg.model_dump() for msg in body.messages]
+        masked_messages, masking_context = privacy_guard.mask_request(messages_dict)
+
+        # Update payload with masked messages
+        payload = body.model_dump()
+        payload['messages'] = masked_messages
+        payload['model'] = target_model
+    else:
+        # 7. Prepare forwarding payload (no masking)
+        payload = body.model_dump()
+        payload['model'] = target_model
 
     # 8. Forward request to target provider with type detection
-    response = await proxy_request(target_url, api_key, payload, body.stream, provider_type)
+    response = await proxy_request(
+        target_url,
+        api_key,
+        payload,
+        body.stream,
+        provider_type,
+        masking_context,
+        privacy_guard
+    )
 
     return response
 

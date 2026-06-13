@@ -12,6 +12,7 @@ A production-ready LLM API routing gateway with a web-based configuration dashbo
 - ✅ **OpenAI Compatible** - Drop-in replacement for OpenAI API
 - ✅ **Streaming Support** - Full SSE (Server-Sent Events) passthrough
 - ✅ **Production Ready** - Comprehensive test suite, error handling, backups
+- 🆕 **Privacy Guard** - Three-layer security with PII masking, audit logging, and policy enforcement
 
 ## 🚀 Quick Start
 
@@ -241,35 +242,76 @@ Easily switch providers without code changes - just update config!
 ```
 agentos/
 ├── gateway.py              # Main gateway application
+├── privacy_guard.py        # Privacy Guard security module
 ├── main.py                 # Legacy gateway (deprecated)
 ├── requirements.txt        # Python dependencies
-├── README.md              # This file
+├── README.md               # This file
+├── PRIVACY_GUARD.md        # Privacy Guard documentation
 ├── config/
-│   ├── config.yaml        # Provider & routing configuration
-│   ├── .env.example       # Environment variable template
+│   ├── config.yaml         # Provider & routing + privacy configuration
+│   ├── .env.example        # Environment variable template
 │   └── .env.gateway.example
 ├── web/
-│   └── index.html        # Dashboard UI (Vue 3 + Tailwind)
-├── tests/
-│   ├── test_gateway.py   # Test suite
-│   └── test_gateway.sh   # Test script
+│   └── index.html          # Dashboard UI (Vue 3 + Tailwind)
+├── tests/                  # All test files (organized)
+│   ├── test_gateway.py     # Gateway test suite
+│   ├── test_privacy_guard.py  # Privacy Guard unit tests (15 tests)
+│   ├── test_privacy_guard_live.py  # Live integration tests
+│   ├── test_gateway.sh     # Gateway shell test script
+│   └── demo_privacy_guard.sh  # Privacy Guard demo script
 └── docs/
-    └── CLAUDE.md         # Project development guidelines
+    └── CLAUDE.md           # Project development guidelines
 ```
 
 ## 🔒 Security
 
-**Best Practices:**
+### Privacy Guard (NEW!)
+
+Three-layer security system for LLM requests:
+
+1. **Policy Check**: Conditional routing based on prompt characteristics
+   - Block prompt injection attempts
+   - Route long/sensitive prompts to secure providers
+   - Enforce content policies
+
+2. **Regex Audit**: Pattern-based detection
+   - Block API keys, credentials, tokens
+   - Log internal codenames and sensitive terms
+   - Detect PII before it reaches LLMs
+
+3. **Data Masking**: Bidirectional PII redaction
+   - Mask emails, phones, SSNs in requests
+   - Automatically unmask in responses (streaming supported!)
+   - Transparent to end users
+
+**Quick Example**:
+```yaml
+privacy_guard:
+  enabled: true
+  data_masking:
+    rules:
+      - name: "Email"
+        pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
+        placeholder_prefix: "[REDACTED_EMAIL_"
+```
+
+📖 **Full Documentation**: See [PRIVACY_GUARD.md](./PRIVACY_GUARD.md)
+
+### Best Practices
+
 - Use `env:VAR_NAME` for API keys (never hardcode)
 - Keep `.env` out of version control
 - Automatic config backups before save
 - Input validation on all API endpoints
+- Enable Privacy Guard in production
 
-**Production Recommendations:**
+### Production Recommendations
+
 - Enable HTTPS
 - Add authentication middleware
 - Set up rate limiting
 - Enable audit logging
+- Configure Privacy Guard rules
 
 ## 🛠️ Development
 

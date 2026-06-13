@@ -107,6 +107,86 @@ Next steps:
 
 ---
 
+## 🧪 Test Organization Policy: Keep Tests in tests/ Directory
+
+**IMPORTANT:** All test files MUST be placed in the `tests/` directory, never in the project root.
+
+**Problem:**
+Test files scattered in the root directory make the repository messy and harder to navigate.
+
+**Rule:**
+- ✅ **DO**: Place all test files in `tests/` directory
+- ✅ **DO**: Use descriptive names like `test_feature.py` or `feature_test.py`
+- ✅ **DO**: Create subdirectories when test count exceeds 10 files
+- ❌ **DON'T**: Put test files in the root directory
+- ❌ **DON'T**: Put test files in the same directory as source code
+
+**Test Directory Structure:**
+
+For small projects (< 10 test files):
+```
+tests/
+├── test_gateway.py
+├── test_privacy_guard.py
+├── test_integration.py
+└── test_utils.py
+```
+
+For larger projects (> 10 test files), organize by category:
+```
+tests/
+├── unit/
+│   ├── test_privacy_guard.py
+│   ├── test_routing.py
+│   └── test_config.py
+├── integration/
+│   ├── test_gateway_integration.py
+│   └── test_privacy_guard_live.py
+├── e2e/
+│   └── test_full_pipeline.py
+└── conftest.py  # Shared fixtures
+```
+
+**Examples:**
+
+❌ Bad (test in root):
+```
+agentos/
+├── gateway.py
+├── test_gateway.py          # Wrong location!
+├── test_privacy_guard.py    # Wrong location!
+└── privacy_guard.py
+```
+
+✅ Good (tests organized):
+```
+agentos/
+├── gateway.py
+├── privacy_guard.py
+└── tests/
+    ├── test_gateway.py      # Correct location
+    └── test_privacy_guard.py
+```
+
+**When to Create Subdirectories:**
+
+Organize tests into subdirectories when:
+- **> 10 test files**: Too many to scan easily
+- **Multiple test types**: Unit, integration, e2e tests
+- **Multiple modules**: Each major module has its own test suite
+- **Shared fixtures**: Need a `conftest.py` per category
+
+**Subdirectory Guidelines:**
+- `unit/` - Fast, isolated unit tests (< 1s each)
+- `integration/` - Multi-component tests (< 5s each)
+- `e2e/` - End-to-end tests (< 30s each)
+- `fixtures/` - Test data and mock files
+- `helpers/` - Test utilities and helper functions
+
+**Summary:** Keep tests organized in `tests/`. Start flat, add structure as you grow.
+
+---
+
 ## 📋 Project Overview
 
 AgentOS is a production-ready LLM API routing gateway built with FastAPI.
@@ -155,17 +235,24 @@ AgentOS is a production-ready LLM API routing gateway built with FastAPI.
 
 ```
 agentos/
-├── gateway.py              # Main gateway application
-├── config.yaml            # Provider & routing configuration
-├── test_gateway.py        # Comprehensive test suite
-├── requirements.txt       # Python dependencies
-├── .env.gateway.example   # Environment variable template
-├── README.md             # Original basic README
-├── README_GATEWAY.md     # Complete feature documentation
-├── QUICKSTART.md         # Quick start guide
-├── TEST_RESULTS.md       # Test validation results
-├── TEST_CHEATSHEET.md    # Testing quick reference
-└── CLAUDE.md            # This file (project guidelines)
+├── gateway.py                  # Main gateway application
+├── privacy_guard.py            # Privacy Guard security module
+├── requirements.txt            # Python dependencies
+├── README.md                   # Main project documentation
+├── PRIVACY_GUARD.md            # Privacy Guard technical docs
+├── config/
+│   ├── config.yaml             # Provider & routing + privacy config
+│   └── .env.example            # Environment variable template
+├── web/
+│   └── index.html              # Dashboard UI (Vue 3 + Tailwind)
+├── tests/                      # All test files (organized)
+│   ├── test_gateway.py         # Gateway test suite
+│   ├── test_privacy_guard.py   # Privacy Guard unit tests (15 tests)
+│   ├── test_privacy_guard_live.py  # Live integration tests
+│   ├── test_gateway.sh         # Gateway shell test script
+│   └── demo_privacy_guard.sh   # Privacy Guard demo script
+└── docs/
+    └── CLAUDE.md               # This file (project guidelines)
 ```
 
 ---
