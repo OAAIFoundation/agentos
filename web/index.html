@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - LLM Gateway</title>
+    <title>AgentOS Dashboard</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -33,6 +33,7 @@
             color: #1a73e8;
             background-color: #e8f0fe;
             border-left-color: #1a73e8;
+            font-weight: 500;
         }
 
         .nav-icon {
@@ -53,44 +54,58 @@
             border-color: transparent;
         }
 
-        .settings-section {
-            padding: 24px 0;
-            border-bottom: 1px solid #e8eaed;
+        .page-container {
+            animation: fadeIn 0.3s ease-in-out;
         }
 
-        .settings-section:last-child {
-            border-bottom: none;
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .section-title {
-            font-size: 20px;
+            font-size: 28px;
             font-weight: 400;
             color: #202124;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
         }
 
         .section-description {
-            font-size: 13px;
+            font-size: 16px;
             color: #5f6368;
-            margin-bottom: 20px;
+            margin-bottom: 32px;
+            line-height: 1.6;
         }
 
         .setting-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 0;
+            padding: 16px 0;
+            border-bottom: 1px solid #f1f3f4;
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
         }
 
         .setting-label {
-            font-size: 14px;
+            font-size: 16px;
             color: #202124;
+            font-weight: 500;
         }
 
         .setting-sublabel {
-            font-size: 12px;
+            font-size: 14px;
             color: #5f6368;
-            margin-top: 2px;
+            margin-top: 4px;
+            line-height: 1.5;
         }
 
         /* Custom scrollbar */
@@ -146,8 +161,8 @@
         /* Badge */
         .badge {
             display: inline-block;
-            padding: 2px 8px;
-            font-size: 11px;
+            padding: 4px 10px;
+            font-size: 12px;
             font-weight: 500;
             border-radius: 4px;
         }
@@ -168,6 +183,54 @@
             padding: 2px 4px;
             border-radius: 2px;
         }
+
+        .subsection-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: #202124;
+            margin-top: 32px;
+            margin-bottom: 16px;
+        }
+
+        .provider-card, .route-card {
+            border: 1px solid #e8eaed;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
+        }
+
+        .provider-card:hover, .route-card:hover {
+            border-color: #1a73e8;
+        }
+
+        .about-paragraph {
+            font-size: 15px;
+            line-height: 1.8;
+            color: #5f6368;
+            margin-bottom: 20px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+            font-size: 15px;
+            color: #5f6368;
+        }
+
+        .feature-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #1a73e8;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body class="bg-white">
@@ -176,11 +239,13 @@
         <div class="sticky top-0 bg-white border-b border-gray-200 z-10">
             <div class="flex items-center justify-between px-6 py-4">
                 <div class="flex items-center space-x-4">
-                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                     </svg>
-                    <h1 class="text-2xl font-normal text-gray-900">Settings</h1>
+                    <div>
+                        <h1 class="text-2xl font-semibold text-gray-900">AgentOS Dashboard</h1>
+                        <p class="text-sm text-gray-500">Intelligent LLM Routing & Privacy Protection Platform</p>
+                    </div>
                 </div>
 
                 <!-- Search Box -->
@@ -208,78 +273,91 @@
             <div class="w-64 border-r border-gray-200 h-screen sticky top-16 overflow-y-auto custom-scrollbar">
                 <nav class="py-4">
                     <div
-                        v-for="section in navSections"
+                        v-for="section in filteredSections"
                         :key="section.id"
-                        :class="['nav-item', {active: activeSection === section.id}]"
-                        @click="scrollToSection(section.id)"
+                        :class="['nav-item', {active: activePage === section.id}]"
+                        @click="activePage = section.id"
                     >
                         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="section.icon" />
                         </svg>
-                        <span>{{ section.label }}</span>
+                        <span v-html="highlightText(section.label)"></span>
                     </div>
                 </nav>
             </div>
 
             <!-- Right Content Area -->
             <div class="flex-1 overflow-y-auto custom-scrollbar h-screen">
-                <div class="max-w-3xl mx-auto px-12 py-6">
+                <div class="max-w-4xl mx-auto px-12 py-8">
 
-                    <!-- Providers Section -->
-                    <div :id="'section-providers'" class="settings-section" v-show="matchesSearch('providers')">
-                        <h2 class="section-title" v-html="highlightText('Providers')"></h2>
-                        <p class="section-description" v-html="highlightText('Configure LLM API providers and their authentication')"></p>
+                    <!-- Providers Page -->
+                    <div v-if="activePage === 'providers'" class="page-container">
+                        <h2 class="section-title">Providers</h2>
+                        <p class="section-description">Configure LLM API providers and their authentication settings. AgentOS supports all major LLM providers with OpenAI-compatible APIs.</p>
 
-                        <div class="space-y-4">
-                            <div v-for="(provider, name) in filteredProviders" :key="name" class="border border-gray-200 rounded-lg p-4">
+                        <div class="space-y-3">
+                            <div v-for="(provider, name) in filteredProviders" :key="name" class="provider-card">
                                 <div class="flex justify-between items-start">
                                     <div class="flex-1">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="font-medium text-gray-900" v-html="highlightText(name)"></span>
+                                        <div class="flex items-center space-x-3 mb-2">
+                                            <span class="text-lg font-medium text-gray-900" v-html="highlightText(name)"></span>
                                             <span class="badge badge-enabled">Configured</span>
                                         </div>
-                                        <div class="text-xs text-gray-500 mt-1" v-html="highlightText(provider.base_url)"></div>
+                                        <div class="text-sm text-gray-500" v-html="highlightText(provider.base_url)"></div>
+                                        <div class="text-xs text-gray-400 mt-1">API Key: {{ provider.api_key.startsWith('env:') ? provider.api_key : '••••••••' }}</div>
                                     </div>
-                                    <button class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
+                                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
                                 </div>
                             </div>
                         </div>
 
-                        <button class="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded text-sm font-medium">
+                        <button class="mt-6 px-5 py-2.5 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition">
                             + Add Provider
                         </button>
                     </div>
 
-                    <!-- Route Rules Section -->
-                    <div :id="'section-routes'" class="settings-section" v-show="matchesSearch('routes')">
-                        <h2 class="section-title" v-html="highlightText('Route Rules')"></h2>
-                        <p class="section-description" v-html="highlightText('Define routing logic for model selection and provider targeting')"></p>
+                    <!-- Route Rules Page -->
+                    <div v-else-if="activePage === 'routes'" class="page-container">
+                        <h2 class="section-title">Route Rules</h2>
+                        <p class="section-description">Define intelligent routing logic for model selection and provider targeting. Rules are evaluated in order, and the first match wins.</p>
 
                         <div class="space-y-2">
-                            <div v-for="(route, index) in filteredRoutes" :key="index" class="setting-row border-b border-gray-100 py-3">
-                                <div>
-                                    <div class="setting-label" v-html="highlightText(route.match_model || '*')"></div>
-                                    <div class="setting-sublabel">→ {{ route.target_provider }} / {{ route.target_model }}</div>
+                            <div v-for="(route, index) in filteredRoutes" :key="index" class="route-card">
+                                <div class="flex justify-between items-center">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-3 mb-1">
+                                            <span class="font-mono text-base font-medium text-gray-900" v-html="highlightText(route.match_model || '*')"></span>
+                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                            </svg>
+                                            <span class="text-sm text-blue-600">{{ route.target_provider }}</span>
+                                            <span class="text-sm text-gray-400">/</span>
+                                            <span class="text-sm text-gray-700">{{ route.target_model }}</span>
+                                        </div>
+                                        <div v-if="route.contains_keywords" class="text-xs text-gray-500">
+                                            Keywords: {{ route.contains_keywords.join(', ') }}
+                                        </div>
+                                    </div>
+                                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
                                 </div>
-                                <button class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
                             </div>
                         </div>
 
-                        <button class="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded text-sm font-medium">
+                        <button class="mt-6 px-5 py-2.5 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition">
                             + Add Route Rule
                         </button>
                     </div>
 
-                    <!-- Privacy Guard Section -->
-                    <div :id="'section-privacy'" class="settings-section" v-show="matchesSearch('privacy')">
-                        <h2 class="section-title" v-html="highlightText('Privacy Guard')"></h2>
-                        <p class="section-description" v-html="highlightText('Protect sensitive data with policy engine and data masking')"></p>
+                    <!-- Privacy Guard Page -->
+                    <div v-else-if="activePage === 'privacy'" class="page-container">
+                        <h2 class="section-title">Privacy Guard</h2>
+                        <p class="section-description">Comprehensive data protection with three-layer security: Policy Engine, Regex Audit, and Data Masking with pseudonymization.</p>
 
                         <!-- Master Toggle -->
                         <div class="setting-row">
                             <div>
-                                <div class="setting-label" v-html="highlightText('Enable Privacy Guard')"></div>
-                                <div class="setting-sublabel">Policy check, regex audit, and data masking</div>
+                                <div class="setting-label">Enable Privacy Guard</div>
+                                <div class="setting-sublabel">Activate all privacy protection features</div>
                             </div>
                             <div
                                 :class="['toggle-switch', {active: config.privacy_guard?.enabled}]"
@@ -288,12 +366,12 @@
                         </div>
 
                         <!-- Policy Engine -->
-                        <div class="mt-6">
-                            <h3 class="text-base font-medium text-gray-900 mb-3" v-html="highlightText('Policy Engine')"></h3>
+                        <div class="mt-8">
+                            <h3 class="subsection-title">Policy Engine</h3>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label">Enable Policies</div>
-                                    <div class="setting-sublabel">Expression-based routing policies</div>
+                                    <div class="setting-label">Enable Policy Engine</div>
+                                    <div class="setting-sublabel">Expression-based routing policies with priority arbitration</div>
                                 </div>
                                 <div
                                     :class="['toggle-switch', {active: config.privacy_guard?.policies?.enabled}]"
@@ -301,22 +379,23 @@
                                 ></div>
                             </div>
 
-                            <div v-if="config.privacy_guard?.policies?.enabled" class="ml-4 mt-3 space-y-2">
-                                <div v-for="(policy, index) in filteredPolicies" :key="index" class="text-sm border-l-2 border-blue-200 pl-4 py-2">
-                                    <div class="font-medium text-gray-700" v-html="highlightText(policy.name)"></div>
-                                    <div class="text-xs text-gray-500 mt-1">{{ policy.condition }}</div>
-                                    <div class="text-xs text-blue-600 mt-1">Action: {{ policy.action.type }}</div>
+                            <div v-if="config.privacy_guard?.policies?.enabled" class="ml-6 mt-4 space-y-3">
+                                <div v-for="(policy, index) in filteredPolicies" :key="index"
+                                     class="border-l-4 border-blue-200 pl-4 py-3 bg-blue-50 bg-opacity-30">
+                                    <div class="font-medium text-gray-800 mb-1" v-html="highlightText(policy.name)"></div>
+                                    <div class="text-sm text-gray-600 mb-1">{{ policy.condition }}</div>
+                                    <div class="text-sm text-blue-700 font-medium">Action: {{ policy.action.type }}</div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Regex Audit -->
-                        <div class="mt-6">
-                            <h3 class="text-base font-medium text-gray-900 mb-3" v-html="highlightText('Regex Audit')"></h3>
+                        <div class="mt-8">
+                            <h3 class="subsection-title">Regex Audit</h3>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Enable Regex Audit</div>
-                                    <div class="setting-sublabel">Pattern-based detection (API keys, credentials)</div>
+                                    <div class="setting-sublabel">Pattern-based detection for API keys, credentials, and sensitive data</div>
                                 </div>
                                 <div
                                     :class="['toggle-switch', {active: config.privacy_guard?.regex_audit?.enabled}]"
@@ -326,12 +405,12 @@
                         </div>
 
                         <!-- Data Masking -->
-                        <div class="mt-6">
-                            <h3 class="text-base font-medium text-gray-900 mb-3" v-html="highlightText('Data Masking')"></h3>
+                        <div class="mt-8">
+                            <h3 class="subsection-title">Data Masking</h3>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Enable Data Masking</div>
-                                    <div class="setting-sublabel">Bidirectional PII protection with pseudonymization</div>
+                                    <div class="setting-sublabel">Bidirectional PII protection with semantic pseudonymization</div>
                                 </div>
                                 <div
                                     :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.enabled}]"
@@ -339,12 +418,12 @@
                                 ></div>
                             </div>
 
-                            <div v-if="config.privacy_guard?.data_masking?.enabled" class="ml-4 mt-4 space-y-3">
+                            <div v-if="config.privacy_guard?.data_masking?.enabled" class="ml-6 mt-4 space-y-4">
                                 <!-- Use Pseudonyms -->
                                 <div class="setting-row">
                                     <div>
-                                        <div class="setting-label" v-html="highlightText('Use Pseudonyms')"></div>
-                                        <div class="setting-sublabel">Generate realistic fake names instead of placeholders</div>
+                                        <div class="setting-label">Use Pseudonyms</div>
+                                        <div class="setting-sublabel">Generate realistic fake names instead of obvious placeholders</div>
                                     </div>
                                     <div
                                         :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.use_pseudonyms}]"
@@ -355,8 +434,8 @@
                                 <!-- Mask Images -->
                                 <div class="setting-row">
                                     <div>
-                                        <div class="setting-label" v-html="highlightText('Mask Images')"></div>
-                                        <div class="setting-sublabel">OCR-based image scanning and pixel-level redaction</div>
+                                        <div class="setting-label">Mask Images</div>
+                                        <div class="setting-sublabel">OCR-based image scanning with pixel-level blackout redaction</div>
                                     </div>
                                     <div
                                         :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.mask_images}]"
@@ -365,11 +444,11 @@
                                 </div>
 
                                 <!-- Session Management -->
-                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                <div class="mt-6 pt-6 border-t border-gray-200">
                                     <div class="setting-row">
                                         <div>
-                                            <div class="setting-label" v-html="highlightText('Session Management')"></div>
-                                            <div class="setting-sublabel">Multi-turn conversation state persistence with TTL</div>
+                                            <div class="setting-label">Session Management</div>
+                                            <div class="setting-sublabel">Multi-turn conversation state persistence with TTL-based memory cleanup</div>
                                         </div>
                                         <div
                                             :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.session_management?.enabled}]"
@@ -377,32 +456,33 @@
                                         ></div>
                                     </div>
 
-                                    <div v-if="config.privacy_guard?.data_masking?.session_management?.enabled" class="ml-4 mt-3 space-y-2 text-sm">
-                                        <div class="flex justify-between">
-                                            <span class="text-gray-600">Session Header</span>
-                                            <span class="font-mono text-gray-900">{{ config.privacy_guard.data_masking.session_management.session_header }}</span>
+                                    <div v-if="config.privacy_guard?.data_masking?.session_management?.enabled"
+                                         class="ml-6 mt-4 bg-gray-50 rounded-lg p-4 space-y-3">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm text-gray-600">Session Header</span>
+                                            <span class="font-mono text-sm font-medium text-gray-900">{{ config.privacy_guard.data_masking.session_management.session_header }}</span>
                                         </div>
-                                        <div class="flex justify-between">
-                                            <span class="text-gray-600">TTL (seconds)</span>
-                                            <span class="font-mono text-gray-900">{{ config.privacy_guard.data_masking.session_management.ttl_seconds }}</span>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm text-gray-600">TTL (Time-To-Live)</span>
+                                            <span class="font-mono text-sm font-medium text-gray-900">{{ config.privacy_guard.data_masking.session_management.ttl_seconds }} seconds</span>
                                         </div>
-                                        <div class="flex justify-between">
-                                            <span class="text-gray-600">Cleanup Interval</span>
-                                            <span class="font-mono text-gray-900">{{ config.privacy_guard.data_masking.session_management.cleanup_interval }}s</span>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm text-gray-600">Cleanup Interval</span>
+                                            <span class="font-mono text-sm font-medium text-gray-900">{{ config.privacy_guard.data_masking.session_management.cleanup_interval }} seconds</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Custom Keywords -->
-                                <div class="mt-4 pt-4 border-t border-gray-200">
-                                    <div class="text-sm font-medium text-gray-700 mb-2" v-html="highlightText('Custom Keywords')"></div>
-                                    <div class="flex flex-wrap gap-2">
+                                <div class="mt-6 pt-6 border-t border-gray-200">
+                                    <div class="text-base font-medium text-gray-900 mb-3">Custom Keywords</div>
+                                    <div class="flex flex-wrap gap-2 mb-3">
                                         <span v-for="keyword in filteredKeywords" :key="keyword"
-                                              class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs"
+                                              class="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
                                               v-html="highlightText(keyword)">
                                         </span>
                                     </div>
-                                    <button class="mt-2 text-blue-600 hover:text-blue-800 text-xs font-medium">
+                                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium">
                                         + Add Keyword
                                     </button>
                                 </div>
@@ -410,15 +490,15 @@
                         </div>
                     </div>
 
-                    <!-- Performance Section -->
-                    <div :id="'section-performance'" class="settings-section" v-show="matchesSearch('performance')">
-                        <h2 class="section-title" v-html="highlightText('Performance')"></h2>
-                        <p class="section-description" v-html="highlightText('Monitor gateway performance and resource usage')"></p>
+                    <!-- Performance Page -->
+                    <div v-else-if="activePage === 'performance'" class="page-container">
+                        <h2 class="section-title">Performance</h2>
+                        <p class="section-description">Monitor AgentOS performance metrics and configure resource management settings.</p>
 
                         <div class="setting-row">
                             <div>
                                 <div class="setting-label">Hot Reload</div>
-                                <div class="setting-sublabel">Automatically reload config on file changes</div>
+                                <div class="setting-sublabel">Automatically reload configuration on file changes</div>
                             </div>
                             <span class="badge badge-enabled">Enabled</span>
                         </div>
@@ -428,34 +508,79 @@
                                 <div class="setting-label">Request Timeout</div>
                                 <div class="setting-sublabel">Maximum duration for upstream API calls</div>
                             </div>
-                            <span class="text-sm text-gray-600">60 seconds</span>
+                            <span class="text-base text-gray-700 font-medium">60 seconds</span>
+                        </div>
+
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Concurrent Connections</div>
+                                <div class="setting-sublabel">Maximum parallel upstream requests</div>
+                            </div>
+                            <span class="text-base text-gray-700 font-medium">Unlimited</span>
                         </div>
                     </div>
 
-                    <!-- About Section -->
-                    <div :id="'section-about'" class="settings-section" v-show="matchesSearch('about')">
-                        <h2 class="section-title" v-html="highlightText('About Gateway')"></h2>
+                    <!-- About Page -->
+                    <div v-else-if="activePage === 'about'" class="page-container">
+                        <h2 class="section-title">About AgentOS</h2>
 
-                        <div class="space-y-3">
-                            <div class="setting-row">
-                                <span class="setting-label">Version</span>
-                                <span class="text-sm text-gray-600">1.0.0</span>
+                        <div class="about-paragraph">
+                            <strong>AgentOS</strong> is an intelligent routing and privacy protection platform designed for the next generation of AI agent applications. Born from the vision of creating a unified operating system for AI agents, AgentOS abstracts the complexity of managing multiple LLM providers while ensuring enterprise-grade data privacy and security.
+                        </div>
+
+                        <div class="about-paragraph">
+                            At its core, AgentOS solves the fundamental challenges faced by modern AI applications: <strong>provider fragmentation</strong>, <strong>cost optimization</strong>, and <strong>data protection</strong>. By providing a single, OpenAI-compatible API endpoint, AgentOS enables developers to seamlessly route requests across 18+ LLM providers including OpenAI, Anthropic, Google, DeepSeek, and open-source models running on Ollama or vLLM.
+                        </div>
+
+                        <h3 class="subsection-title">Key Features</h3>
+                        <ul class="feature-list mb-6">
+                            <li><strong>Intelligent Routing:</strong> Dynamic model selection based on keywords, prompt characteristics, and custom policies</li>
+                            <li><strong>Privacy Guard:</strong> Three-layer security with policy engine, regex audit, and semantic pseudonymization</li>
+                            <li><strong>Session Management:</strong> Multi-turn conversation state persistence with TTL-based memory management</li>
+                            <li><strong>Cost Optimization:</strong> Automatic downgrade to cost-effective models for simple tasks</li>
+                            <li><strong>Hot Reload:</strong> Zero-downtime configuration updates with file-watch automation</li>
+                            <li><strong>Multimodal Support:</strong> OCR-based image masking for visual content protection</li>
+                        </ul>
+
+                        <h3 class="subsection-title">Architecture Philosophy</h3>
+                        <div class="about-paragraph">
+                            AgentOS is built on a modular, extensible architecture that separates concerns between routing, privacy, and provider adaptation. The system employs a <strong>three-layer data masking pipeline</strong> (Regex → SLM → Keywords) combined with <strong>Faker-based pseudonymization</strong> to ensure sensitive data never leaves your infrastructure in plaintext, while maintaining semantic coherence across multi-turn conversations.
+                        </div>
+
+                        <div class="about-paragraph">
+                            Unlike traditional API gateways, AgentOS understands the unique requirements of LLM applications: streaming responses, multi-modal inputs, stateful sessions, and context-aware routing. It's designed to scale from a single developer's laptop to enterprise production deployments handling thousands of concurrent agent conversations.
+                        </div>
+
+                        <h3 class="subsection-title">The Vision</h3>
+                        <div class="about-paragraph">
+                            AgentOS is not just a gateway—it's the foundation of an <strong>Agent Operating System</strong>. As AI agents become more autonomous and capable, they need a robust infrastructure layer that handles identity, memory, security, and inter-agent communication. AgentOS aims to be that layer, providing the essential services that enable agents to operate safely, efficiently, and at scale.
+                        </div>
+
+                        <div class="mt-8 space-y-4">
+                            <div class="flex justify-between items-center py-3 border-t border-gray-200">
+                                <span class="text-base font-medium text-gray-700">Version</span>
+                                <span class="text-base text-gray-600">1.0.0-beta</span>
                             </div>
 
-                            <div class="setting-row">
-                                <span class="setting-label">Repository</span>
+                            <div class="flex justify-between items-center py-3 border-t border-gray-200">
+                                <span class="text-base font-medium text-gray-700">Repository</span>
                                 <a href="https://github.com/OAAIFoundation/agentos" target="_blank"
-                                   class="text-sm text-blue-600 hover:underline">
+                                   class="text-base text-blue-600 hover:underline font-medium">
                                     github.com/OAAIFoundation/agentos
                                 </a>
                             </div>
 
-                            <div class="setting-row">
-                                <span class="setting-label">Documentation</span>
+                            <div class="flex justify-between items-center py-3 border-t border-gray-200">
+                                <span class="text-base font-medium text-gray-700">Documentation</span>
                                 <a href="https://github.com/OAAIFoundation/agentos#readme" target="_blank"
-                                   class="text-sm text-blue-600 hover:underline">
+                                   class="text-base text-blue-600 hover:underline font-medium">
                                     View README
                                 </a>
+                            </div>
+
+                            <div class="flex justify-between items-center py-3 border-t border-b border-gray-200">
+                                <span class="text-base font-medium text-gray-700">License</span>
+                                <span class="text-base text-gray-600">MIT License</span>
                             </div>
                         </div>
                     </div>
@@ -473,7 +598,7 @@
                 return {
                     config: {},
                     loading: false,
-                    activeSection: 'providers',
+                    activePage: 'providers',
                     searchQuery: '',
                     navSections: [
                         {
@@ -498,13 +623,23 @@
                         },
                         {
                             id: 'about',
-                            label: 'About Gateway',
+                            label: 'About AgentOS',
                             icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
                         }
                     ]
                 };
             },
             computed: {
+                filteredSections() {
+                    if (!this.searchQuery) return this.navSections;
+
+                    const query = this.searchQuery.toLowerCase();
+                    return this.navSections.filter(section => {
+                        return section.label.toLowerCase().includes(query) ||
+                               this.hasMatchingContent(section.id, query);
+                    });
+                },
+
                 filteredProviders() {
                     if (!this.searchQuery || !this.config.providers) return this.config.providers;
 
@@ -557,22 +692,6 @@
             },
             mounted() {
                 this.loadConfig();
-
-                // Intersection Observer for active section tracking
-                const observer = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            const sectionId = entry.target.id.replace('section-', '');
-                            this.activeSection = sectionId;
-                        }
-                    });
-                }, { threshold: 0.5 });
-
-                this.$nextTick(() => {
-                    document.querySelectorAll('.settings-section').forEach(section => {
-                        observer.observe(section);
-                    });
-                });
             },
             methods: {
                 async loadConfig() {
@@ -587,34 +706,15 @@
                     }
                 },
 
-                scrollToSection(sectionId) {
-                    const element = document.getElementById('section-' + sectionId);
-                    if (element) {
-                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                },
-
-                matchesSearch(sectionId) {
-                    if (!this.searchQuery) return true;
-
-                    const section = this.navSections.find(s => s.id === sectionId);
-                    if (!section) return true;
-
-                    const query = this.searchQuery.toLowerCase();
-
-                    // Check section label
-                    if (section.label.toLowerCase().includes(query)) return true;
-
-                    // Check specific content based on section
+                hasMatchingContent(sectionId, query) {
                     if (sectionId === 'providers') {
                         return Object.keys(this.filteredProviders).length > 0;
                     } else if (sectionId === 'routes') {
                         return this.filteredRoutes.length > 0;
                     } else if (sectionId === 'privacy') {
-                        const keywords = ['privacy', 'guard', 'masking', 'policy', 'regex', 'session', 'pseudonym', 'pii'];
-                        return keywords.some(keyword => keyword.includes(query) || query.includes(keyword));
+                        const keywords = ['privacy', 'guard', 'masking', 'policy', 'regex', 'session', 'pseudonym'];
+                        return keywords.some(k => k.includes(query) || query.includes(k));
                     }
-
                     return true;
                 },
 
