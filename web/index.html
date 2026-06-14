@@ -231,6 +231,117 @@
             color: #1a73e8;
             font-weight: bold;
         }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        /* Modal Dialog */
+        .modal-dialog {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e8eaed;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e8eaed;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #202124;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        .btn {
+            padding: 8px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-primary {
+            background-color: #1a73e8;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #1557b0;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: #5f6368;
+            border: 1px solid #dadce0;
+        }
+
+        .btn-secondary:hover {
+            background-color: #f1f3f4;
+        }
     </style>
 </head>
 <body class="bg-white">
@@ -306,7 +417,7 @@
                                         <div class="text-sm text-gray-500" v-html="highlightText(provider.base_url)"></div>
                                         <div class="text-xs text-gray-400 mt-1">API Key: {{ provider.api_key.startsWith('env:') ? provider.api_key : '••••••••' }}</div>
                                     </div>
-                                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                                    <button @click="editProvider(name, provider)" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
                                 </div>
                             </div>
                         </div>
@@ -338,7 +449,7 @@
                                             Keywords: {{ route.contains_keywords.join(', ') }}
                                         </div>
                                     </div>
-                                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                                    <button @click="editRoute(index, route)" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
                                 </div>
                             </div>
                         </div>
@@ -679,6 +790,70 @@
                 </div>
             </div>
         </div>
+
+        <!-- Provider Edit Modal -->
+        <div v-if="showProviderModal" class="modal-overlay" @click.self="closeProviderModal">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 class="text-xl font-semibold text-gray-900">Edit Provider</h3>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Provider Name</label>
+                        <input type="text" v-model="editingProvider.name" class="form-input" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Base URL</label>
+                        <input type="text" v-model="editingProvider.base_url" class="form-input" placeholder="https://api.example.com/v1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">API Key</label>
+                        <input type="text" v-model="editingProvider.api_key" class="form-input" placeholder="env:API_KEY_NAME or actual key">
+                        <p class="text-xs text-gray-500 mt-1">Use "env:VAR_NAME" format for environment variables</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="closeProviderModal" class="btn btn-secondary">Cancel</button>
+                    <button @click="saveProvider" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Route Edit Modal -->
+        <div v-if="showRouteModal" class="modal-overlay" @click.self="closeRouteModal">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 class="text-xl font-semibold text-gray-900">Edit Route Rule</h3>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Match Model Pattern</label>
+                        <input type="text" v-model="editingRoute.match_model" class="form-input" placeholder="gpt-4* or exact-model-name">
+                        <p class="text-xs text-gray-500 mt-1">Use * for wildcard matching</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Target Provider</label>
+                        <select v-model="editingRoute.target_provider" class="form-input">
+                            <option v-for="(provider, name) in config.providers" :key="name" :value="name">{{ name }}</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Target Model</label>
+                        <input type="text" v-model="editingRoute.target_model" class="form-input" placeholder="preserve or specific-model-name">
+                        <p class="text-xs text-gray-500 mt-1">Use "preserve" to keep original model name</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Keywords (Optional, comma-separated)</label>
+                        <input type="text" v-model="editingRouteKeywords" class="form-input" placeholder="translate, summary, summarize">
+                        <p class="text-xs text-gray-500 mt-1">Leave empty to match all prompts</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="closeRouteModal" class="btn btn-secondary">Cancel</button>
+                    <button @click="saveRoute" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -694,6 +869,14 @@
                     logs: [],
                     logLevel: 'all',
                     logRefreshInterval: null,
+                    // Provider editing
+                    showProviderModal: false,
+                    editingProvider: { name: '', base_url: '', api_key: '' },
+                    // Route editing
+                    showRouteModal: false,
+                    editingRoute: { match_model: '', target_provider: '', target_model: '' },
+                    editingRouteIndex: -1,
+                    editingRouteKeywords: '',
                     navSections: [
                         {
                             id: 'providers',
@@ -913,6 +1096,113 @@
                 toggleMaskImages() {
                     if (this.config.privacy_guard?.data_masking) {
                         this.config.privacy_guard.data_masking.mask_images = !this.config.privacy_guard.data_masking.mask_images;
+                    }
+                },
+
+                // Provider editing methods
+                editProvider(name, provider) {
+                    this.editingProvider = {
+                        name: name,
+                        base_url: provider.base_url,
+                        api_key: provider.api_key
+                    };
+                    this.showProviderModal = true;
+                },
+
+                closeProviderModal() {
+                    this.showProviderModal = false;
+                    this.editingProvider = { name: '', base_url: '', api_key: '' };
+                },
+
+                async saveProvider() {
+                    try {
+                        // Update config object
+                        const providerName = this.editingProvider.name;
+                        this.config.providers[providerName] = {
+                            base_url: this.editingProvider.base_url,
+                            api_key: this.editingProvider.api_key
+                        };
+
+                        // Save to backend
+                        const response = await fetch('/api/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.config)
+                        });
+
+                        if (response.ok) {
+                            alert('Provider saved successfully!');
+                            this.closeProviderModal();
+                            await this.loadConfig();
+                        } else {
+                            const error = await response.json();
+                            alert(`Failed to save: ${error.detail}`);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save provider:', error);
+                        alert('Failed to save provider. Check console for details.');
+                    }
+                },
+
+                // Route editing methods
+                editRoute(index, route) {
+                    this.editingRouteIndex = index;
+                    this.editingRoute = {
+                        match_model: route.match_model || '',
+                        target_provider: route.target_provider || '',
+                        target_model: route.target_model || 'preserve'
+                    };
+                    this.editingRouteKeywords = route.contains_keywords ? route.contains_keywords.join(', ') : '';
+                    this.showRouteModal = true;
+                },
+
+                closeRouteModal() {
+                    this.showRouteModal = false;
+                    this.editingRoute = { match_model: '', target_provider: '', target_model: '' };
+                    this.editingRouteIndex = -1;
+                    this.editingRouteKeywords = '';
+                },
+
+                async saveRoute() {
+                    try {
+                        // Parse keywords
+                        const keywords = this.editingRouteKeywords
+                            .split(',')
+                            .map(k => k.trim())
+                            .filter(k => k.length > 0);
+
+                        // Build route object
+                        const updatedRoute = {
+                            match_model: this.editingRoute.match_model,
+                            target_provider: this.editingRoute.target_provider,
+                            target_model: this.editingRoute.target_model
+                        };
+
+                        if (keywords.length > 0) {
+                            updatedRoute.contains_keywords = keywords;
+                        }
+
+                        // Update config object
+                        this.config.routes[this.editingRouteIndex] = updatedRoute;
+
+                        // Save to backend
+                        const response = await fetch('/api/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.config)
+                        });
+
+                        if (response.ok) {
+                            alert('Route saved successfully!');
+                            this.closeRouteModal();
+                            await this.loadConfig();
+                        } else {
+                            const error = await response.json();
+                            alert(`Failed to save: ${error.detail}`);
+                        }
+                    } catch (error) {
+                        console.error('Failed to save route:', error);
+                        alert('Failed to save route. Check console for details.');
                     }
                 },
 
