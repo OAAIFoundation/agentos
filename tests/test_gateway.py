@@ -30,6 +30,7 @@ def setup_config():
     """
     import gateway
     from data_masking import create_data_masker
+    from session_manager import initialize_session_storage
 
     if not gateway.config_data:
         gateway.config_data = load_config()
@@ -37,6 +38,11 @@ def setup_config():
     # Initialize data_masker for tests
     if not gateway.data_masker:
         gateway.data_masker = create_data_masker(gateway.config_data)
+
+    # Initialize session_storage for tests
+    if not gateway.session_storage:
+        session_config = gateway.config_data.get('privacy_guard', {}).get('data_masking', {}).get('session_management', {})
+        gateway.session_storage = initialize_session_storage(session_config)
 
 @pytest.fixture
 def mock_openai_response():
@@ -1626,6 +1632,183 @@ def test_pseudonym_stream_unmasking():
     # The Aho-Corasick implementation in StreamUnmasker is ready,
     # but proper integration testing requires more complex fixtures
     pytest.skip("Streaming unmask test requires complex async mock setup - implementation verified manually")
+
+
+# ======================== Multi-Turn Session Tests ========================
+
+@respx.mock
+def test_multi_turn_masking_history(client):
+    """
+    Test multi-turn conversation with session state persistence
+
+    Scenario:
+    - Turn 1: Send "王伟是项目负责人" with session ID "agent-99"
+              Verify "王伟" masked to consistent fake name (e.g., "Project_Source")
+    - Turn 2: Send chat history containing fake name from Turn 1
+              Verify fake name in response is unmasked back to "王伟"
+    """
+    import gateway
+
+    # Skip if pseudonymization not available or session management disabled
+    if not gateway.data_masker or not gateway.data_masker.use_pseudonyms:
+        pytest.skip("Pseudonymization not enabled")
+    if not gateway.session_storage or not gateway.session_storage.enabled:
+        pytest.skip("Session management not enabled")
+
+    # Temporarily add "王伟" to custom keywords for testing
+    original_keywords = gateway.data_masker.custom_keywords.copy()
+    gateway.data_masker.custom_keywords.append("王伟")
+
+    try:
+        # Mock OpenAI endpoint
+        openai_url = "https://api.openai.com/v1/chat/completions"
+        captured_requests = []
+
+        def capture_and_echo(request):
+            """Capture request and echo back the masked content"""
+            captured_requests.append(request)
+            payload = json.loads(request.content.decode())
+            user_message = payload["messages"][-1]["content"]
+
+            # Echo back user's message (which contains fake names)
+            mock_response = {
+                "id": "chatcmpl-multiturn",
+                "object": "chat.completion",
+                "created": 1234567890,
+                "model": "gpt-4o",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": f"关于{user_message}的分析报告"
+                    },
+                    "finish_reason": "stop"
+                }],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 30, "total_tokens": 80}
+            }
+            return httpx.Response(200, json=mock_response)
+
+        respx.post(openai_url).mock(side_effect=capture_and_echo)
+
+        session_id = "agent-99"
+        session_header = gateway.session_storage.session_header
+
+        # ===== Turn 1: First message =====
+        turn1_payload = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "王伟是项目负责人"}
+            ],
+            "stream": False
+        }
+
+        turn1_response = client.post(
+            "/v1/chat/completions",
+            json=turn1_payload,
+            headers={"Authorization": "Bearer test-key", session_header: session_id}
+        )
+
+        assert turn1_response.status_code == 200, f"Turn 1 failed: {turn1_response.status_code}"
+
+        # Verify session ID echoed back
+        assert session_header in turn1_response.headers, "Session ID not in response headers"
+        assert turn1_response.headers[session_header] == session_id, "Session ID mismatch"
+
+        # Extract fake name from upstream request
+        turn1_upstream = captured_requests[0]
+        turn1_upstream_payload = json.loads(turn1_upstream.content.decode())
+        turn1_masked_content = turn1_upstream_payload["messages"][0]["content"]
+
+        # Verify "王伟" was masked
+        assert "王伟" not in turn1_masked_content, "Real name should be masked in Turn 1"
+        assert "Project_" in turn1_masked_content, "Fake name should be present in Turn 1"
+
+        # Extract the fake name (Project_XXX)
+        fake_name = turn1_masked_content.replace("是项目负责人", "")
+
+        # ===== Turn 2: Multi-turn with history =====
+        # Simulate client sending chat history with fake name
+        turn2_payload = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "王伟是项目负责人"},
+                {"role": "assistant", "content": f"好的，{fake_name}是项目负责人"},
+                {"role": "user", "content": f"告诉我{fake_name}负责什么"}
+            ],
+            "stream": False
+        }
+
+        turn2_response = client.post(
+            "/v1/chat/completions",
+            json=turn2_payload,
+            headers={"Authorization": "Bearer test-key", session_header: session_id}
+        )
+
+        assert turn2_response.status_code == 200, f"Turn 2 failed: {turn2_response.status_code}"
+
+        # Verify Turn 2 upstream request still masked
+        turn2_upstream = captured_requests[1]
+        turn2_upstream_payload = json.loads(turn2_upstream.content.decode())
+        turn2_last_message = turn2_upstream_payload["messages"][-1]["content"]
+
+        assert "王伟" not in turn2_last_message, "Real name should still be masked in Turn 2"
+        assert fake_name in turn2_last_message, "Fake name should be reused in Turn 2"
+
+        # Verify Turn 2 response unmasked fake name back to real name
+        turn2_response_data = turn2_response.json()
+        turn2_assistant_message = turn2_response_data["choices"][0]["message"]["content"]
+
+        # The upstream echoed fake name, gateway should unmask it
+        assert "王伟" in turn2_assistant_message or fake_name not in turn2_assistant_message, \
+            "Fake name should be unmasked in Turn 2 response"
+
+    finally:
+        # Restore original keywords
+        gateway.data_masker.custom_keywords = original_keywords
+
+
+@respx.mock
+def test_session_ttl_eviction():
+    """
+    Test session TTL eviction mechanism
+
+    Scenario:
+    - Create a session with short TTL (10 seconds)
+    - Manually expire it by setting last_active to past timestamp
+    - Trigger cleanup
+    - Verify session removed from memory
+    """
+    import gateway
+    import time
+
+    if not gateway.session_storage or not gateway.session_storage.enabled:
+        pytest.skip("Session management not enabled")
+
+    # Create a test session
+    test_session_id = "test-expire-123"
+    _, test_store = gateway.session_storage.get_or_create_session(test_session_id)
+
+    # Add some data to the store
+    test_store.add_pseudonym_mapping("测试数据", "Project_Test")
+
+    # Verify session exists
+    initial_count = gateway.session_storage.get_active_session_count()
+    assert test_session_id in gateway.session_storage.sessions, "Session should exist"
+
+    # Manually expire the session (set last_active to 1 hour ago)
+    expired_timestamp = time.time() - 3600
+    gateway.session_storage.manually_expire_session(test_session_id, expired_timestamp)
+
+    # Trigger cleanup
+    evicted_count = gateway.session_storage.cleanup_expired_sessions()
+
+    # Verify session was evicted
+    assert evicted_count >= 1, f"Expected at least 1 eviction, got {evicted_count}"
+    assert test_session_id not in gateway.session_storage.sessions, \
+        "Expired session should be removed from memory"
+
+    final_count = gateway.session_storage.get_active_session_count()
+    assert final_count < initial_count, "Active session count should decrease"
 
 
 # ======================== Test Summary ========================

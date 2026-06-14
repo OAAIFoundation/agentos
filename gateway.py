@@ -27,6 +27,9 @@ from privacy_guard import GenericPolicyEngine, MaskingContext, PolicyContext, Co
 # Import Data Masking Module
 from data_masking import DataMasker, MaskingStore, StreamUnmasker, create_data_masker
 
+# Import Session Manager
+from session_manager import SessionStorage, initialize_session_storage, get_session_storage, session_cleanup_task
+
 # ======================== Configuration ========================
 
 CONFIG_FILE = "config/config.yaml"
@@ -38,6 +41,12 @@ privacy_guard: Optional[GenericPolicyEngine] = None
 
 # Data Masker instance (Bidirectional PII Masking, initialized on startup)
 data_masker: Optional[DataMasker] = None
+
+# Session Storage instance (Multi-turn conversation state management)
+session_storage: Optional[SessionStorage] = None
+
+# Background cleanup task handle
+cleanup_task_handle: Optional[asyncio.Task] = None
 
 # ======================== Pydantic Models ========================
 
@@ -275,7 +284,8 @@ async def proxy_request(
     provider_type: str = 'openai',
     masking_context: Optional[MaskingContext] = None,
     privacy_guard_instance: Optional[GenericPolicyEngine] = None,
-    data_masking_store: Optional[MaskingStore] = None
+    data_masking_store: Optional[MaskingStore] = None,
+    custom_headers: Optional[Dict[str, str]] = None
 ) -> Any:
     """
     Forward request to target provider
@@ -326,7 +336,8 @@ async def proxy_request(
 
                     async def stream_generator():
                         """Stream generator with Data Masking unmasking support"""
-                        if data_masker and data_masking_store and data_masking_store.mask_to_original:
+                        has_masking = (data_masking_store.mask_to_original or data_masking_store.fake_to_real)
+                        if data_masker and data_masking_store and has_masking:
                             # Streaming with Data Masking unmasking
                             # Create StreamUnmasker for sliding window unmasking
                             stream_unmasker = StreamUnmasker(data_masking_store)
@@ -486,10 +497,15 @@ async def proxy_request(
                             async for chunk in response.aiter_bytes():
                                 yield chunk
 
+                    # Merge custom headers (e.g., session ID) with upstream headers
+                    response_headers_dict = dict(response.headers)
+                    if custom_headers:
+                        response_headers_dict.update(custom_headers)
+
                     return StreamingResponse(
                         stream_generator(),
                         media_type="text/event-stream",
-                        headers=dict(response.headers)
+                        headers=response_headers_dict
                     )
             else:
                 # Non-streaming request
@@ -510,7 +526,9 @@ async def proxy_request(
                     response_data = response.json()
 
                     # Unmask response with Data Masking (priority)
-                    if data_masker and data_masking_store and data_masking_store.mask_to_original:
+                    # Check both placeholder and pseudonym mappings
+                    has_masking = (data_masking_store.mask_to_original or data_masking_store.fake_to_real)
+                    if data_masker and data_masking_store and has_masking:
                         # Unmask content in non-streaming response
                         if "choices" in response_data:
                             for choice in response_data["choices"]:
@@ -531,7 +549,7 @@ async def proxy_request(
                                     )
                                     choice["message"]["content"] = unmasked
 
-                    return JSONResponse(content=response_data)
+                    return JSONResponse(content=response_data, headers=custom_headers or {})
                 except ValueError:
                     # Response is not valid JSON
                     raise HTTPException(
@@ -593,7 +611,7 @@ async def startup_event():
     """
     Load configuration on startup and setup file watcher
     """
-    global config_data, privacy_guard, data_masker
+    global config_data, privacy_guard, data_masker, session_storage, cleanup_task_handle
 
     try:
         config_data = load_config()
@@ -604,12 +622,22 @@ async def startup_event():
         # Initialize Data Masker
         data_masker = create_data_masker(config_data)
 
+        # Initialize Session Storage
+        session_config = config_data.get('privacy_guard', {}).get('data_masking', {}).get('session_management', {})
+        session_storage = initialize_session_storage(session_config)
+
+        # Start background cleanup task if session management enabled
+        if session_storage and session_storage.enabled:
+            cleanup_task_handle = asyncio.create_task(session_cleanup_task(session_storage))
+            print(f"[OK] Session cleanup task started (TTL={session_storage.ttl_seconds}s)")
+
         print("\n" + "="*80)
         print("[OK] Configuration loaded successfully")
         print(f"   Providers: {list(config_data.get('providers', {}).keys())}")
         print(f"   Routes: {len(config_data.get('routes', []))}")
         print(f"   Privacy Guard: {'Enabled' if privacy_guard.enabled else 'Disabled'}")
         print(f"   Data Masking: {'Enabled' if data_masker and data_masker.enabled else 'Disabled'}")
+        print(f"   Session Management: {'Enabled' if session_storage and session_storage.enabled else 'Disabled'}")
         print("="*80 + "\n")
 
         # Setup file watcher for hot reload
@@ -871,7 +899,20 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
 
     # ==================== DATA MASKING LAYER: Bidirectional PII Masking ====================
     # NEW: Data Masking Module (takes priority over legacy Privacy Guard masking)
-    data_masking_store = MaskingStore()
+
+    # Session Management: Retrieve or create session store
+    session_header = session_storage.session_header if session_storage else "X-Session-ID"
+    client_session_id = request.headers.get(session_header)
+
+    if session_storage and session_storage.enabled:
+        actual_session_id, data_masking_store = session_storage.get_or_create_session(client_session_id)
+        # Set session ID in response headers for client tracking
+        response_headers = {session_header: actual_session_id}
+    else:
+        # Session management disabled, use ephemeral store
+        data_masking_store = MaskingStore()
+        response_headers = {}
+
     masking_context = MaskingContext()  # Legacy Privacy Guard
 
     if data_masker and data_masker.enabled:
@@ -933,7 +974,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         provider_type,
         masking_context,
         privacy_guard,
-        data_masking_store
+        data_masking_store,
+        response_headers  # Pass session headers
     )
 
     return response

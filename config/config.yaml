@@ -367,6 +367,13 @@ privacy_guard:
     # Multimodal image masking (OCR + pixel-level redaction)
     mask_images: true  # Enable OCR scanning and blackout box masking for images
 
+    # Session lifecycle management for multi-turn conversations
+    session_management:
+      enabled: true
+      session_header: "X-Session-ID"  # Client header to identify different agent windows
+      ttl_seconds: 1800                # Session expiry time (30 minutes of inactivity)
+      cleanup_interval: 60             # Background cleanup interval in seconds
+
     # Custom keywords (Layer 3 - absolute confidential terms)
     custom_keywords:
       - "Project-X"
