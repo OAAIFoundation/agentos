@@ -47,7 +47,7 @@ class PolicyContext:
     contains_injection: bool = False
     contains_credential: bool = False
     contains_api_key: bool = False  # AWS AKIA or OpenAI sk-
-    is_trivial_greeting: bool = False  # Short greetings like "hello", "你好", "test"
+    is_trivial_greeting: bool = False  # Short greetings like "hello", "hi", "test"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for rule engine"""
@@ -86,7 +86,7 @@ class PolicyContext:
         # Detect trivial greetings (short prompts with only basic greetings)
         is_trivial_greeting = False
         if prompt_length < 20:
-            is_trivial_greeting = bool(re.match(r'^\s*(你好|hello|hi|test|测试)\s*[!?。！？]*\s*$', prompt, re.IGNORECASE))
+            is_trivial_greeting = bool(re.match(r'^\s*(hello|hi|hey|test|testing)\s*[!?.]*\s*$', prompt, re.IGNORECASE))
 
         return PolicyContext(
             model=model,

@@ -214,7 +214,7 @@ def test_api_key_allows_normal_text(engine):
 
 def test_trivial_greeting_reroutes_hello(engine):
     """Test that simple 'hello' is rerouted to local model"""
-    trivial_prompts = ["hello", "Hello!", "你好", "hi", "test", "测试"]
+    trivial_prompts = ["hello", "Hello!", "hey", "hi", "test", "testing"]
 
     for prompt in trivial_prompts:
         context = PolicyContext.from_dict({
@@ -309,7 +309,7 @@ def test_contains_api_key_detection():
 def test_is_trivial_greeting_detection():
     """Test that is_trivial_greeting correctly detects simple greetings"""
     # Should be detected as trivial
-    trivial = ["hello", "Hi!", "你好", "test", "测试", "hello?"]
+    trivial = ["hello", "Hi!", "hey", "test", "testing", "hello?"]
     for prompt in trivial:
         context = PolicyContext.from_dict({
             "model": "gpt-4",
@@ -323,7 +323,7 @@ def test_is_trivial_greeting_detection():
     non_trivial = [
         "hello world, can you help?",
         "This is a test of the system",
-        "你好，我需要帮助",
+        "Hello, I need help",
         "A" * 30  # Too long
     ]
     for prompt in non_trivial:

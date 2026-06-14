@@ -1228,15 +1228,15 @@ def test_slm_masking_success(client):
     Test SLM Layer 2 successfully detects and masks semantic entities
 
     Scenario:
-    - Local SLM successfully returns sensitive entities: ["内部秘密代码"]
+    - Local SLM successfully returns sensitive entities: ["InternalSecretCode"]
     - Gateway should mask this entity with [MASK_SLM_0]
     - Layer 1 (regex) masks email
-    - Layer 3 (keywords) masks "Shane"
+    - Layer 3 (keywords) masks "David"
 
     Expected:
     - Email masked by Layer 1
-    - "内部秘密代码" masked by Layer 2 (SLM)
-    - "Shane" masked by Layer 3
+    - "InternalSecretCode" masked by Layer 2 (SLM)
+    - "David" masked by Layer 3
     - All unmasked correctly in response
     """
     # Force enable SLM for this test (bypass health check)
@@ -1258,7 +1258,7 @@ def test_slm_masking_success(client):
                 "index": 0,
                 "message": {
                     "role": "assistant",
-                    "content": '["内部秘密代码"]'  # JSON array of sensitive words
+                    "content": '["InternalSecretCode"]'  # JSON array of sensitive words
                 },
                 "finish_reason": "stop"
             }],
@@ -1300,7 +1300,7 @@ def test_slm_masking_success(client):
         "messages": [
             {
                 "role": "user",
-                "content": "Email test@oaaif.org (Shane Wang) about 内部秘密代码 implementation"
+                "content": "Email test@oaaif.org (David Wang) about InternalSecretCode implementation"
             }
         ],
         "stream": False
@@ -1329,15 +1329,15 @@ def test_slm_masking_success(client):
         f"Email should be masked (either pseudonym or placeholder), got: {upstream_content}"
 
     # Layer 2: SLM entity masked (with pseudonymization, should be "Project_XXX")
-    assert "内部秘密代码" not in upstream_content, \
+    assert "InternalSecretCode" not in upstream_content, \
         f"Layer 2 (SLM) should mask entity, got: {upstream_content}"
     # With pseudonyms: SLM entities get "Project_XXX" pattern
     # Fallback to placeholder if Faker unavailable
     assert "Project_" in upstream_content or "[MASK_SLM_0]" in upstream_content, \
         f"SLM entity should be masked (either pseudonym or placeholder), got: {upstream_content}"
 
-    # Layer 3: Custom keyword masked (Shane -> Project_XXX or [MASK_KEYWORD_X])
-    assert "Shane" not in upstream_content, \
+    # Layer 3: Custom keyword masked (David -> Project_XXX or [MASK_KEYWORD_X])
+    assert "David" not in upstream_content, \
         f"Layer 3 should mask keyword, got: {upstream_content}"
     # With pseudonyms: keywords also get "Project_XXX" pattern
     assert "Project_" in upstream_content or "MASK_KEYWORD" in upstream_content, \
@@ -1510,9 +1510,9 @@ def test_pseudonym_semantic_consistency(client):
     """
     Test pseudonymization: Same sensitive value should map to same fake name within session
 
-    Scenario: User prompt contains multiple occurrences of "王伟"
-    Expected: Gateway replaces all "王伟" with the SAME fake name (e.g., "张强")
-              and restores all back to "王伟" in response
+    Scenario: User prompt contains multiple occurrences of "John Smith"
+    Expected: Gateway replaces all "John Smith" with the SAME fake name (e.g., "Bob Johnson")
+              and restores all back to "John Smith" in response
     """
     import gateway
 
@@ -1520,9 +1520,9 @@ def test_pseudonym_semantic_consistency(client):
     if not gateway.data_masker or not gateway.data_masker.use_pseudonyms:
         pytest.skip("Pseudonymization not enabled or Faker unavailable")
 
-    # Temporarily add "王伟" to custom keywords for this test
+    # Temporarily add "WangWei" to custom keywords for this test
     original_keywords = gateway.data_masker.custom_keywords.copy()
-    gateway.data_masker.custom_keywords.append("王伟")
+    gateway.data_masker.custom_keywords.append("WangWei")
 
     # Mock upstream LLM endpoint
     openai_url = "https://api.openai.com/v1/chat/completions"
@@ -1562,7 +1562,7 @@ def test_pseudonym_semantic_consistency(client):
         "messages": [
             {
                 "role": "user",
-                "content": "王伟去了北京，王伟开了一个会。联系王伟: test@oaaif.org"
+                "content": "WangWei went to Beijing, WangWei held a meeting. Contact WangWei: test@oaaif.org"
             }
         ],
         "stream": False
@@ -1583,20 +1583,20 @@ def test_pseudonym_semantic_consistency(client):
     masked_prompt = upstream_payload["messages"][0]["content"]
 
     # Check masking happened
-    assert "王伟" not in masked_prompt, "Real name should be masked"
+    assert "WangWei" not in masked_prompt, "Real name should be masked"
     assert "test@oaaif.org" not in masked_prompt, "Email should be masked"
 
-    # Check that "王伟" is replaced consistently
+    # Check that "WangWei" is replaced consistently
     # Simple approach: extract what the fake pseudonym is by looking at the store
     # The fake pseudonym should appear exactly 3 times in the masked prompt
 
-    # Get the actual fake value from the prompt - it's the value that replaces "王伟"
-    # We know: original text has "王伟去了北京，王伟开了一个会。联系王伟:"
-    # Masked text has "XXX去了北京，XXX开了一个会。联系XXX:" where XXX is the pseudonym
+    # Get the actual fake value from the prompt - it's the value that replaces "WangWei"
+    # We know: original text has "WangWei went to Beijing, WangWei held a meeting. Contact WangWei:"
+    # Masked text has "XXX went to Beijing, XXX held a meeting. Contact XXX:" where XXX is the pseudonym
 
     # Extract the first word after removing common text
-    # Simplest: the fake value comes before "去了北京"
-    fake_value = masked_prompt.split("去了北京")[0]  # "Project_次数"
+    # Simplest: the fake value comes before "went to Beijing"
+    fake_value = masked_prompt.split("went to Beijing")[0].strip().split()[-1]  # Extract last word
 
     # Verify this value appears exactly 3 times
     count = masked_prompt.count(fake_value)
@@ -1612,7 +1612,7 @@ def test_pseudonym_semantic_consistency(client):
 
     # Response should contain original values (unmasked)
     # Note: The unmask logic depends on the upstream response echoing back the fake values
-    # For non-streaming, unmask_text() should replace fake_value with "王伟"
+    # For non-streaming, unmask_text() should replace fake_value with "WangWei"
     #
     # TODO: Full unmasking validation needs the mock to properly echo fake values
     # For now, just verify the consistency (same input mapped to same fake 3 times)
@@ -1642,10 +1642,10 @@ def test_multi_turn_masking_history(client):
     Test multi-turn conversation with session state persistence
 
     Scenario:
-    - Turn 1: Send "王伟是项目负责人" with session ID "agent-99"
-              Verify "王伟" masked to consistent fake name (e.g., "Project_Source")
+    - Turn 1: Send "WangWei is the project leader" with session ID "agent-99"
+              Verify "WangWei" masked to consistent fake name (e.g., "Project_Source")
     - Turn 2: Send chat history containing fake name from Turn 1
-              Verify fake name in response is unmasked back to "王伟"
+              Verify fake name in response is unmasked back to "WangWei"
     """
     import gateway
 
@@ -1655,9 +1655,9 @@ def test_multi_turn_masking_history(client):
     if not gateway.session_storage or not gateway.session_storage.enabled:
         pytest.skip("Session management not enabled")
 
-    # Temporarily add "王伟" to custom keywords for testing
+    # Temporarily add "WangWei" to custom keywords for testing
     original_keywords = gateway.data_masker.custom_keywords.copy()
-    gateway.data_masker.custom_keywords.append("王伟")
+    gateway.data_masker.custom_keywords.append("WangWei")
 
     try:
         # Mock OpenAI endpoint
@@ -1680,7 +1680,7 @@ def test_multi_turn_masking_history(client):
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": f"关于{user_message}的分析报告"
+                        "content": f"Analysis report about {user_message}"
                     },
                     "finish_reason": "stop"
                 }],
@@ -1697,7 +1697,7 @@ def test_multi_turn_masking_history(client):
         turn1_payload = {
             "model": "gpt-4o",
             "messages": [
-                {"role": "user", "content": "王伟是项目负责人"}
+                {"role": "user", "content": "WangWei is the project leader"}
             ],
             "stream": False
         }
@@ -1719,21 +1719,21 @@ def test_multi_turn_masking_history(client):
         turn1_upstream_payload = json.loads(turn1_upstream.content.decode())
         turn1_masked_content = turn1_upstream_payload["messages"][0]["content"]
 
-        # Verify "王伟" was masked
-        assert "王伟" not in turn1_masked_content, "Real name should be masked in Turn 1"
+        # Verify "WangWei" was masked
+        assert "WangWei" not in turn1_masked_content, "Real name should be masked in Turn 1"
         assert "Project_" in turn1_masked_content, "Fake name should be present in Turn 1"
 
         # Extract the fake name (Project_XXX)
-        fake_name = turn1_masked_content.replace("是项目负责人", "")
+        fake_name = turn1_masked_content.replace("is the project leader", "").strip()
 
         # ===== Turn 2: Multi-turn with history =====
         # Simulate client sending chat history with fake name
         turn2_payload = {
             "model": "gpt-4o",
             "messages": [
-                {"role": "user", "content": "王伟是项目负责人"},
-                {"role": "assistant", "content": f"好的，{fake_name}是项目负责人"},
-                {"role": "user", "content": f"告诉我{fake_name}负责什么"}
+                {"role": "user", "content": "WangWei is the project leader"},
+                {"role": "assistant", "content": f"Okay, {fake_name} is the project leader"},
+                {"role": "user", "content": f"Tell me what {fake_name} is responsible for"}
             ],
             "stream": False
         }
@@ -1751,7 +1751,7 @@ def test_multi_turn_masking_history(client):
         turn2_upstream_payload = json.loads(turn2_upstream.content.decode())
         turn2_last_message = turn2_upstream_payload["messages"][-1]["content"]
 
-        assert "王伟" not in turn2_last_message, "Real name should still be masked in Turn 2"
+        assert "WangWei" not in turn2_last_message, "Real name should still be masked in Turn 2"
         assert fake_name in turn2_last_message, "Fake name should be reused in Turn 2"
 
         # Verify Turn 2 response unmasked fake name back to real name
@@ -1759,7 +1759,7 @@ def test_multi_turn_masking_history(client):
         turn2_assistant_message = turn2_response_data["choices"][0]["message"]["content"]
 
         # The upstream echoed fake name, gateway should unmask it
-        assert "王伟" in turn2_assistant_message or fake_name not in turn2_assistant_message, \
+        assert "WangWei" in turn2_assistant_message or fake_name not in turn2_assistant_message, \
             "Fake name should be unmasked in Turn 2 response"
 
     finally:
@@ -1789,7 +1789,7 @@ def test_session_ttl_eviction():
     _, test_store = gateway.session_storage.get_or_create_session(test_session_id)
 
     # Add some data to the store
-    test_store.add_pseudonym_mapping("测试数据", "Project_Test")
+    test_store.add_pseudonym_mapping("test_data", "Project_Test")
 
     # Verify session exists
     initial_count = gateway.session_storage.get_active_session_count()

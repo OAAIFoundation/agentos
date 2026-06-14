@@ -25,13 +25,13 @@ This document contains project-specific guidelines and instructions for working 
 
 **Examples:**
 
-❌ Bad (Chinese):
+❌ Bad (Non-English identifiers):
 ```python
-# 计算年龄
-def 计算年龄(出生日期):
-    """根据出生日期计算当前年龄"""
-    # 返回年龄差
-    return 当前年份 - 出生日期.year
+# Chinese comments and variable names (DON'T DO THIS)
+def jisuan_nianling(chusheng_riqi):  # Function name in Pinyin
+    """Calculate age in Chinese"""  # Docstring mixing languages
+    # Return age difference
+    return current_year - chusheng_riqi.year
 ```
 
 ✅ Good (English):

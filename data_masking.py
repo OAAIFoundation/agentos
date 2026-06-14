@@ -80,7 +80,7 @@ class MaskingStore:
     Request-specific masking store with pseudonymization support
     Maintains bidirectional mapping between real values and fake pseudonyms
     """
-    # Pseudonym mappings (real ↔ fake)
+    # Pseudonym mappings (real <-> fake)
     real_to_fake: Dict[str, str] = field(default_factory=dict)
     fake_to_real: Dict[str, str] = field(default_factory=dict)
 
@@ -303,10 +303,11 @@ class DataMasker:
             return []
 
         system_prompt = (
-            "你是一个专职的数据脱敏助手。请分析用户的输入，找出其中所有可能属于商业机密、"
-            "核心技术代号、未公开产品名、个人隐私特征（如特定人名、特殊公司名）的实体短语。"
-            "必须严格以 JSON 字符串数组格式返回这些短语，不要包含任何解释、不要 Markdown 格式。"
-            "例如: [\"秘密代号A\", \"研发部内部协议\"]"
+            "You are a specialized data masking assistant. Analyze the user's input and identify "
+            "all entity phrases that may be business secrets, core technology codenames, unreleased "
+            "product names, or personal privacy features (e.g., specific person names, special company names). "
+            "Return these phrases strictly as a JSON string array without any explanation or Markdown formatting. "
+            "Example: [\"Secret Codename A\", \"R&D Internal Protocol\"]"
         )
 
         try:
