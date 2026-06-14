@@ -3,6 +3,7 @@ LLM Routing Gateway Test Suite
 Test gateway routing logic using pytest + respx
 """
 
+import json
 import pytest
 import respx
 import httpx
@@ -26,11 +27,15 @@ def setup_config():
     """
     Load configuration before all tests
     """
-    global config_data
-    from gateway import config_data as cfg
-    if not cfg:
-        import gateway
+    import gateway
+    from data_masking import create_data_masker
+
+    if not gateway.config_data:
         gateway.config_data = load_config()
+
+    # Initialize data_masker for tests
+    if not gateway.data_masker:
+        gateway.data_masker = create_data_masker(gateway.config_data)
 
 @pytest.fixture
 def mock_openai_response():
@@ -908,6 +913,441 @@ def test_malformed_upstream_response(client):
     assert "non-json" in error["detail"].lower(), "Error should mention non-JSON response"
 
     print("✅ Malformed upstream response test passed")
+
+# ======================== Data Masking Tests ========================
+
+@respx.mock
+def test_data_masking_non_stream(client):
+    """
+    Test bidirectional data masking for non-streaming requests
+
+    Scenario:
+    - User sends request containing PII (email: john.doe@example.com)
+    - Gateway should mask email before sending to LLM
+    - LLM response contains masked placeholder
+    - Gateway should unmask email in final response to user
+
+    Expected:
+    - Email masked in upstream request: [MASK_email_0]
+    - Email restored in final response: john.doe@example.com
+    """
+    # Mock OpenAI response containing masked placeholder
+    openai_url = "https://api.openai.com/v1/chat/completions"
+
+    # Captured request for assertion
+    captured_request = []
+
+    def capture_and_respond(request):
+        """Capture request and return mock response with masked placeholder"""
+        captured_request.append(request)
+
+        # Mock response contains the mask placeholder from upstream
+        mock_response = {
+            "id": "chatcmpl-test123",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "gpt-4o-mini",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "Sure! I'll send it to [MASK_EMAIL_0] right away."
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30
+            }
+        }
+        return httpx.Response(200, json=mock_response)
+
+    mock_route = respx.post(openai_url).mock(side_effect=capture_and_respond)
+
+    # User request with real PII
+    request_payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Please send the report to john.doe@example.com"}
+        ],
+        "stream": False
+    }
+
+    # Send request to gateway
+    response = client.post(
+        "/v1/chat/completions",
+        json=request_payload,
+        headers={"Authorization": "Bearer test-key"}
+    )
+
+    # Assert: HTTP status should be 200
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+
+    # Assert: Mock was called
+    assert mock_route.called, "OpenAI API was not called"
+
+    # Assert: Upstream request has masked email
+    upstream_request = captured_request[0]
+    upstream_payload = json.loads(upstream_request.content.decode())
+    upstream_content = upstream_payload["messages"][0]["content"]
+
+    assert "john.doe@example.com" not in upstream_content, \
+        f"Email should be masked in upstream request, but got: {upstream_content}"
+    assert "[MASK_EMAIL_0]" in upstream_content, \
+        f"Email should be replaced with [MASK_EMAIL_0], but got: {upstream_content}"
+
+    # Assert: Final response to user has unmasked email
+    final_response = response.json()
+    final_content = final_response["choices"][0]["message"]["content"]
+
+    assert "john.doe@example.com" in final_content, \
+        f"Email should be unmasked in final response, but got: {final_content}"
+    assert "[MASK_EMAIL_0]" not in final_content, \
+        f"Mask placeholder should be removed in final response, but got: {final_content}"
+
+    print("✅ Data masking non-stream test passed")
+
+
+@respx.mock
+def test_data_masking_streaming(client):
+    """
+    Test bidirectional data masking for streaming requests
+    with mask placeholder split across multiple chunks
+
+    Scenario:
+    - User sends request containing email
+    - LLM returns response where [MASK_email_0] is split into 3 chunks:
+      Chunk 1: "Sure! I'll send it to [MASK_em"
+      Chunk 2: "ail_"
+      Chunk 3: "0] right away."
+    - Gateway's sliding window buffer should reassemble and unmask
+
+    Expected:
+    - Final stream reconstructs full email address
+    - No partial mask placeholders leaked to user
+    """
+    openai_url = "https://api.openai.com/v1/chat/completions"
+
+    # Captured request for assertion
+    captured_request = []
+
+    def capture_and_stream(request):
+        """Capture request and return streaming response with split mask"""
+        captured_request.append(request)
+
+        # Simulate SSE stream where mask placeholder is split across chunks
+        # [MASK_EMAIL_0] split into: "[MASK_EM" + "AIL_" + "0]"
+        sse_chunks = [
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n',
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"Sure! I\'ll send it to [MASK_EM"},"finish_reason":null}]}\n\n',
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"AIL_"},"finish_reason":null}]}\n\n',
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"0] right away."},"finish_reason":null}]}\n\n',
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+            b'data: [DONE]\n\n'
+        ]
+
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=b''.join(sse_chunks)
+        )
+
+    mock_route = respx.post(openai_url).mock(side_effect=capture_and_stream)
+
+    # User request with real PII
+    request_payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Please send the report to john.doe@example.com"}
+        ],
+        "stream": True
+    }
+
+    # Send request to gateway
+    response = client.post(
+        "/v1/chat/completions",
+        json=request_payload,
+        headers={"Authorization": "Bearer test-key"}
+    )
+
+    # Assert: HTTP status should be 200
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+    # Assert: Content-Type should be text/event-stream
+    assert "text/event-stream" in response.headers.get("content-type", ""), \
+        f"Content-Type should be text/event-stream, got: {response.headers.get('content-type')}"
+
+    # Assert: Mock was called
+    assert mock_route.called, "OpenAI API was not called"
+
+    # Assert: Upstream request has masked email
+    upstream_request = captured_request[0]
+    upstream_payload = json.loads(upstream_request.content.decode())
+    upstream_content = upstream_payload["messages"][0]["content"]
+
+    assert "john.doe@example.com" not in upstream_content, \
+        f"Email should be masked in upstream request, but got: {upstream_content}"
+    assert "[MASK_EMAIL_0]" in upstream_content, \
+        f"Email should be replaced with [MASK_EMAIL_0], but got: {upstream_content}"
+
+    # Parse streaming response
+    response_text = response.text
+    full_content = ""
+
+    # Extract content from SSE chunks
+    for line in response_text.split('\n'):
+        if line.startswith('data: ') and line != 'data: [DONE]':
+            try:
+                data_str = line[6:]
+                data = json.loads(data_str)
+                if "choices" in data and len(data["choices"]) > 0:
+                    delta = data["choices"][0].get("delta", {})
+                    if "content" in delta:
+                        full_content += delta["content"]
+            except json.JSONDecodeError:
+                continue
+
+    # Assert: Final stream content has unmasked email
+    assert "john.doe@example.com" in full_content, \
+        f"Email should be unmasked in stream, but got: {full_content}"
+
+    # Assert: No partial mask placeholders leaked
+    assert "[MASK_EM" not in full_content, \
+        f"Partial mask should not appear in stream, but got: {full_content}"
+    assert "AIL_" not in full_content or "email" in full_content.lower(), \
+        f"Partial mask should not appear in stream, but got: {full_content}"
+    assert "[MASK_EMAIL_0]" not in full_content, \
+        f"Full mask placeholder should not appear in final stream, but got: {full_content}"
+
+    print("✅ Data masking streaming test passed")
+
+
+# ======================== SLM Layer Tests ========================
+
+@respx.mock
+def test_slm_masking_fallback(client):
+    """
+    Test SLM Layer 2 graceful degradation when local model is unavailable
+
+    Scenario:
+    - Local SLM endpoint returns 500 error or timeout
+    - Gateway should continue with Layer 1 (regex) and Layer 3 (keywords)
+    - Request should succeed without breaking
+
+    Expected:
+    - Email still masked by Layer 1 regex
+    - Custom keyword still masked by Layer 3
+    - Request completes successfully
+    """
+    # Mock local SLM endpoint returning 500 error
+    slm_url = "http://127.0.0.1:11434/v1/chat/completions"
+    respx.post(slm_url).mock(return_value=httpx.Response(500, json={"error": "Model unavailable"}))
+
+    # Mock OpenAI response
+    openai_url = "https://api.openai.com/v1/chat/completions"
+    captured_request = []
+
+    def capture_and_respond(request):
+        captured_request.append(request)
+        mock_response = {
+            "id": "chatcmpl-fallback",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "gpt-4o-mini",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "I'll email [MASK_EMAIL_0] about [MASK_KEYWORD_0]."
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        }
+        return httpx.Response(200, json=mock_response)
+
+    respx.post(openai_url).mock(side_effect=capture_and_respond)
+
+    # Request with email and custom keyword
+    request_payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Send email to test@oaaif.org about Project-X details"}
+        ],
+        "stream": False
+    }
+
+    response = client.post(
+        "/v1/chat/completions",
+        json=request_payload,
+        headers={"Authorization": "Bearer test-key"}
+    )
+
+    # Assert: Request succeeds despite SLM failure
+    assert response.status_code == 200, f"Expected 200 despite SLM failure, got {response.status_code}"
+
+    # Assert: Layer 1 (regex) still masked email
+    upstream_request = captured_request[0]
+    upstream_payload = json.loads(upstream_request.content.decode())
+    upstream_content = upstream_payload["messages"][0]["content"]
+
+    assert "test@oaaif.org" not in upstream_content, \
+        f"Layer 1 regex should still mask email, got: {upstream_content}"
+    assert "[MASK_EMAIL_0]" in upstream_content, \
+        f"Email should be masked by Layer 1, got: {upstream_content}"
+
+    # Assert: Layer 3 (keywords) still masked custom keyword
+    assert "Project-X" not in upstream_content, \
+        f"Layer 3 should still mask keyword, got: {upstream_content}"
+    assert "[MASK_KEYWORD_0]" in upstream_content, \
+        f"Keyword should be masked by Layer 3, got: {upstream_content}"
+
+    # Assert: Final response unmasked correctly
+    final_response = response.json()
+    final_content = final_response["choices"][0]["message"]["content"]
+
+    assert "test@oaaif.org" in final_content, \
+        f"Email should be unmasked, got: {final_content}"
+    assert "Project-X" in final_content, \
+        f"Keyword should be unmasked, got: {final_content}"
+
+    print("✅ SLM fallback (graceful degradation) test passed")
+
+
+@respx.mock
+def test_slm_masking_success(client):
+    """
+    Test SLM Layer 2 successfully detects and masks semantic entities
+
+    Scenario:
+    - Local SLM successfully returns sensitive entities: ["内部秘密代码"]
+    - Gateway should mask this entity with [MASK_SLM_0]
+    - Layer 1 (regex) masks email
+    - Layer 3 (keywords) masks "Shane"
+
+    Expected:
+    - Email masked by Layer 1
+    - "内部秘密代码" masked by Layer 2 (SLM)
+    - "Shane" masked by Layer 3
+    - All unmasked correctly in response
+    """
+    # Force enable SLM for this test (bypass health check)
+    import gateway
+    if gateway.data_masker:
+        gateway.data_masker.is_slm_available = True
+
+    # Mock local SLM endpoint returning detected entities
+    slm_url = "http://127.0.0.1:11434/v1/chat/completions"
+
+    def slm_response(request):
+        # SLM extracts semantic sensitive entity
+        mock_slm_response = {
+            "id": "slm-test",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "qwen2.5:0.5b-instruct",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": '["内部秘密代码"]'  # JSON array of sensitive words
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60}
+        }
+        return httpx.Response(200, json=mock_slm_response)
+
+    respx.post(slm_url).mock(side_effect=slm_response)
+
+    # Mock OpenAI response with all three types of masks
+    openai_url = "https://api.openai.com/v1/chat/completions"
+    captured_request = []
+
+    def capture_and_respond(request):
+        captured_request.append(request)
+        # Note: [MASK_KEYWORD_1] is used because "Project-X" (KEYWORD_0) comes first in config
+        mock_response = {
+            "id": "chatcmpl-slm-success",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "gpt-4o-mini",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "I'll contact [MASK_EMAIL_0] (person: [MASK_KEYWORD_1] Wang) about [MASK_SLM_0]."
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        }
+        return httpx.Response(200, json=mock_response)
+
+    respx.post(openai_url).mock(side_effect=capture_and_respond)
+
+    # Request with all three layers of sensitive data
+    request_payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Email test@oaaif.org (Shane Wang) about 内部秘密代码 implementation"
+            }
+        ],
+        "stream": False
+    }
+
+    response = client.post(
+        "/v1/chat/completions",
+        json=request_payload,
+        headers={"Authorization": "Bearer test-key"}
+    )
+
+    # Assert: Request succeeds
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+    # Assert: Upstream request has all three layers masked
+    upstream_request = captured_request[0]
+    upstream_payload = json.loads(upstream_request.content.decode())
+    upstream_content = upstream_payload["messages"][0]["content"]
+
+    # Layer 1: Email masked
+    assert "test@oaaif.org" not in upstream_content, \
+        f"Layer 1 should mask email, got: {upstream_content}"
+    assert "[MASK_EMAIL_0]" in upstream_content, \
+        f"Email should be masked, got: {upstream_content}"
+
+    # Layer 2: SLM entity masked
+    assert "内部秘密代码" not in upstream_content, \
+        f"Layer 2 (SLM) should mask entity, got: {upstream_content}"
+    assert "[MASK_SLM_0]" in upstream_content, \
+        f"SLM entity should be masked, got: {upstream_content}"
+
+    # Layer 3: Custom keyword masked (Shane appears twice in original, so could be any counter)
+    assert "Shane" not in upstream_content, \
+        f"Layer 3 should mask keyword, got: {upstream_content}"
+    assert "MASK_KEYWORD" in upstream_content, \
+        f"Keyword should be masked, got: {upstream_content}"
+
+    # Assert: Final response unmasked all layers correctly
+    final_response = response.json()
+    final_content = final_response["choices"][0]["message"]["content"]
+
+    assert "test@oaaif.org" in final_content, \
+        f"Email should be unmasked, got: {final_content}"
+    assert "内部秘密代码" in final_content, \
+        f"SLM entity should be unmasked, got: {final_content}"
+    assert "Shane" in final_content, \
+        f"Keyword should be unmasked, got: {final_content}"
+
+    # Assert: No mask placeholders leaked
+    assert "[MASK_" not in final_content, \
+        f"No mask placeholders should remain, got: {final_content}"
+
+    print("✅ SLM success (three-layer masking) test passed")
+
 
 # ======================== Test Summary ========================
 

@@ -24,6 +24,9 @@ from watchdog.events import FileSystemEventHandler
 # Import Privacy Guard (Generic Policy Engine)
 from privacy_guard import GenericPolicyEngine, MaskingContext, PolicyContext, ContextBuilder, create_privacy_guard
 
+# Import Data Masking Module
+from data_masking import DataMasker, MaskingStore, StreamUnmasker, create_data_masker
+
 # ======================== Configuration ========================
 
 CONFIG_FILE = "config/config.yaml"
@@ -32,6 +35,9 @@ config_lock = asyncio.Lock()
 
 # Privacy Guard instance (Generic Policy Engine, initialized on startup)
 privacy_guard: Optional[GenericPolicyEngine] = None
+
+# Data Masker instance (Bidirectional PII Masking, initialized on startup)
+data_masker: Optional[DataMasker] = None
 
 # ======================== Pydantic Models ========================
 
@@ -91,7 +97,7 @@ async def reload_config():
     """
     Reload configuration with thread safety
     """
-    global config_data, privacy_guard
+    global config_data, privacy_guard, data_masker
     async with config_lock:
         try:
             new_config = load_config()
@@ -100,10 +106,14 @@ async def reload_config():
             # Reinitialize Privacy Guard with new config
             privacy_guard = create_privacy_guard(config_data)
 
+            # Reinitialize Data Masker with new config
+            data_masker = create_data_masker(config_data)
+
             print(f"\n[RELOAD] Configuration reloaded at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"   Providers: {len(config_data.get('providers', {}))}")
             print(f"   Routes: {len(config_data.get('routes', []))}")
             print(f"   Privacy Guard: {'Enabled' if privacy_guard.enabled else 'Disabled'}")
+            print(f"   Data Masking: {'Enabled' if data_masker and data_masker.enabled else 'Disabled'}")
         except Exception as e:
             print(f"[ERROR] Failed to reload config: {str(e)}")
 
@@ -264,7 +274,8 @@ async def proxy_request(
     stream: bool,
     provider_type: str = 'openai',
     masking_context: Optional[MaskingContext] = None,
-    privacy_guard_instance: Optional[PrivacyGuard] = None
+    privacy_guard_instance: Optional[GenericPolicyEngine] = None,
+    data_masking_store: Optional[MaskingStore] = None
 ) -> Any:
     """
     Forward request to target provider
@@ -272,6 +283,7 @@ async def proxy_request(
     Transparently passes through errors
     Handles provider-specific API formats
     Supports Privacy Guard unmasking for responses
+    Supports Data Masking bidirectional PII protection
     """
     # Prepare headers based on provider type
     if provider_type == 'anthropic':
@@ -313,9 +325,126 @@ async def proxy_request(
                         )
 
                     async def stream_generator():
-                        """Stream generator with Privacy Guard unmasking support"""
-                        if privacy_guard_instance and masking_context and masking_context.mask_to_original:
-                            # Streaming with unmasking (SSE line-by-line processing)
+                        """Stream generator with Data Masking unmasking support"""
+                        if data_masker and data_masking_store and data_masking_store.mask_to_original:
+                            # Streaming with Data Masking unmasking
+                            # Create StreamUnmasker for sliding window unmasking
+                            stream_unmasker = StreamUnmasker(data_masking_store)
+
+                            buffer = b""
+                            text_buffer = ""
+
+                            # Process stream: parse SSE -> extract text -> unmask -> reconstruct SSE
+                            async for chunk in response.aiter_bytes():
+                                buffer += chunk
+
+                                # Process complete lines
+                                while b"\n" in buffer:
+                                    line_bytes, buffer = buffer.split(b"\n", 1)
+                                    line = line_bytes.decode('utf-8', errors='ignore')
+
+                                    if line.startswith("data: ") and line != "data: [DONE]":
+                                        try:
+                                            # Parse SSE data
+                                            data_str = line[6:]
+                                            data = json.loads(data_str)
+
+                                            # Extract content from delta
+                                            if "choices" in data:
+                                                for choice in data["choices"]:
+                                                    if "delta" in choice and "content" in choice["delta"]:
+                                                        masked_text = choice["delta"]["content"]
+                                                        text_buffer += masked_text
+
+                                                        # Try to unmask accumulated text buffer
+                                                        # Check if buffer contains complete mask placeholder
+                                                        unmasked_parts = []
+                                                        remaining = text_buffer
+
+                                                        while remaining:
+                                                            # Find potential mask start
+                                                            bracket_pos = remaining.find('[')
+
+                                                            if bracket_pos == -1:
+                                                                # No more masks, release all
+                                                                unmasked_parts.append(remaining)
+                                                                remaining = ""
+                                                                break
+
+                                                            # Release text before bracket
+                                                            if bracket_pos > 0:
+                                                                unmasked_parts.append(remaining[:bracket_pos])
+                                                                remaining = remaining[bracket_pos:]
+
+                                                            # Try to match complete mask
+                                                            mask_match = stream_unmasker.mask_pattern.match(remaining)
+
+                                                            if mask_match:
+                                                                # Found complete mask
+                                                                mask_placeholder = mask_match.group(0)
+                                                                original = stream_unmasker.store.get_original(mask_placeholder)
+
+                                                                if original:
+                                                                    unmasked_parts.append(original)
+                                                                else:
+                                                                    unmasked_parts.append(mask_placeholder)
+
+                                                                remaining = remaining[mask_match.end():]
+                                                            elif stream_unmasker._could_be_mask_prefix(remaining):
+                                                                # Incomplete mask, keep in buffer
+                                                                break
+                                                            else:
+                                                                # Not a valid mask, release bracket
+                                                                unmasked_parts.append(remaining[0])
+                                                                remaining = remaining[1:]
+
+                                                        # Yield unmasked parts
+                                                        if unmasked_parts:
+                                                            unmasked_text = ''.join(unmasked_parts)
+                                                            sse_data = {
+                                                                "id": "chatcmpl-masked",
+                                                                "object": "chat.completion.chunk",
+                                                                "created": int(datetime.now().timestamp()),
+                                                                "model": payload.get("model", "unknown"),
+                                                                "choices": [{
+                                                                    "index": 0,
+                                                                    "delta": {"content": unmasked_text},
+                                                                    "finish_reason": None
+                                                                }]
+                                                            }
+                                                            yield f"data: {json.dumps(sse_data, ensure_ascii=False)}\n\n".encode('utf-8')
+
+                                                        # Update text_buffer with remaining
+                                                        text_buffer = remaining
+
+                                        except Exception as e:
+                                            # If parsing fails, continue
+                                            logger.error(f"SSE parse error: {e}")
+                                            continue
+
+                            # Flush remaining buffer
+                            if text_buffer:
+                                # Unmask any remaining text
+                                unmasked = data_masker.unmask_text(text_buffer, data_masking_store)
+                                if unmasked:
+                                    sse_data = {
+                                        "id": "chatcmpl-masked",
+                                        "object": "chat.completion.chunk",
+                                        "created": int(datetime.now().timestamp()),
+                                        "model": payload.get("model", "unknown"),
+                                        "choices": [{
+                                            "index": 0,
+                                            "delta": {"content": unmasked},
+                                            "finish_reason": None
+                                        }]
+                                    }
+                                    yield f"data: {json.dumps(sse_data, ensure_ascii=False)}\n\n".encode('utf-8')
+
+                            # Send final [DONE] marker
+                            yield b"data: [DONE]\n\n"
+
+                        elif privacy_guard_instance and masking_context and masking_context.mask_to_original:
+                            # Legacy Privacy Guard streaming unmasking
                             buffer = b""
                             async for chunk in response.aiter_bytes():
                                 buffer += chunk
@@ -380,8 +509,17 @@ async def proxy_request(
                 try:
                     response_data = response.json()
 
-                    # Unmask response if Privacy Guard is enabled
-                    if privacy_guard_instance and masking_context and masking_context.mask_to_original:
+                    # Unmask response with Data Masking (priority)
+                    if data_masker and data_masking_store and data_masking_store.mask_to_original:
+                        # Unmask content in non-streaming response
+                        if "choices" in response_data:
+                            for choice in response_data["choices"]:
+                                if "message" in choice and "content" in choice["message"]:
+                                    masked_content = choice["message"]["content"]
+                                    unmasked = data_masker.unmask_text(masked_content, data_masking_store)
+                                    choice["message"]["content"] = unmasked
+                    # Legacy Privacy Guard unmasking (fallback)
+                    elif privacy_guard_instance and masking_context and masking_context.mask_to_original:
                         # Unmask content in non-streaming response
                         if "choices" in response_data:
                             for choice in response_data["choices"]:
@@ -418,19 +556,35 @@ def log_route_decision(
     """
     Log routing decision to console
     """
-    print("\n" + "="*80)
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚦 Route Decision")
-    print("="*80)
-    if route_name:
-        print(f"📋 Matched Route: {route_name}")
-    if matched_keywords:
-        print(f"🔑 Keyword Match: YES")
-    print(f"📥 Original Model: {original_model}")
-    print(f"🎯 Target Provider: {target_provider}")
-    print(f"📤 Target Model: {target_model}")
-    if original_model != target_model:
-        print(f"🔄 Model Rewritten: {original_model} → {target_model}")
-    print("="*80 + "\n")
+    try:
+        print("\n" + "="*80)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚦 Route Decision")
+        print("="*80)
+        if route_name:
+            print(f"📋 Matched Route: {route_name}")
+        if matched_keywords:
+            print(f"🔑 Keyword Match: YES")
+        print(f"📥 Original Model: {original_model}")
+        print(f"🎯 Target Provider: {target_provider}")
+        print(f"📤 Target Model: {target_model}")
+        if original_model != target_model:
+            print(f"🔄 Model Rewritten: {original_model} → {target_model}")
+        print("="*80 + "\n")
+    except UnicodeEncodeError:
+        # Fallback for terminals that don't support emojis
+        print("\n" + "="*80)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Route Decision")
+        print("="*80)
+        if route_name:
+            print(f"Matched Route: {route_name}")
+        if matched_keywords:
+            print(f"Keyword Match: YES")
+        print(f"Original Model: {original_model}")
+        print(f"Target Provider: {target_provider}")
+        print(f"Target Model: {target_model}")
+        if original_model != target_model:
+            print(f"Model Rewritten: {original_model} -> {target_model}")
+        print("="*80 + "\n")
 
 # ======================== API Routes ========================
 
@@ -439,7 +593,7 @@ async def startup_event():
     """
     Load configuration on startup and setup file watcher
     """
-    global config_data, privacy_guard
+    global config_data, privacy_guard, data_masker
 
     try:
         config_data = load_config()
@@ -447,11 +601,15 @@ async def startup_event():
         # Initialize Privacy Guard
         privacy_guard = create_privacy_guard(config_data)
 
+        # Initialize Data Masker
+        data_masker = create_data_masker(config_data)
+
         print("\n" + "="*80)
         print("[OK] Configuration loaded successfully")
         print(f"   Providers: {list(config_data.get('providers', {}).keys())}")
         print(f"   Routes: {len(config_data.get('routes', []))}")
         print(f"   Privacy Guard: {'Enabled' if privacy_guard.enabled else 'Disabled'}")
+        print(f"   Data Masking: {'Enabled' if data_masker and data_masker.enabled else 'Disabled'}")
         print("="*80 + "\n")
 
         # Setup file watcher for hot reload
@@ -711,10 +869,33 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         has_keywords
     )
 
-    # ==================== PRIVACY GUARD LAYER 3: Data Masking ====================
-    # Mask sensitive data before sending to LLM
-    masking_context = MaskingContext()
-    if privacy_guard and privacy_guard.enabled:
+    # ==================== DATA MASKING LAYER: Bidirectional PII Masking ====================
+    # NEW: Data Masking Module (takes priority over legacy Privacy Guard masking)
+    data_masking_store = MaskingStore()
+    masking_context = MaskingContext()  # Legacy Privacy Guard
+
+    if data_masker and data_masker.enabled:
+        # NEW: Use Data Masking Module for bidirectional PII protection
+        messages_dict = [msg.model_dump() for msg in body.messages]
+
+        # Mask each message content (reuse same store for all messages)
+        for msg in messages_dict:
+            if 'content' in msg:
+                original_content = msg['content']
+                # Pass existing store to accumulate all mappings
+                masked_content, data_masking_store = data_masker.mask_prompt(
+                    original_content,
+                    data_masking_store
+                )
+                msg['content'] = masked_content
+
+        # Prepare payload with masked messages
+        payload = body.model_dump()
+        payload['messages'] = messages_dict
+        payload['model'] = target_model
+
+    elif privacy_guard and privacy_guard.enabled:
+        # LEGACY: Privacy Guard masking (fallback)
         messages_dict = [msg.model_dump() for msg in body.messages]
         masked_messages, masking_context = privacy_guard.mask_request(messages_dict)
 
@@ -735,7 +916,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         body.stream,
         provider_type,
         masking_context,
-        privacy_guard
+        privacy_guard,
+        data_masking_store
     )
 
     return response

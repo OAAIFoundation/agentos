@@ -357,8 +357,25 @@ privacy_guard:
   # === 3. Data Masking (Bidirectional PII Redaction) ===
   # Masks sensitive data before sending to LLM, unmasks in response
   # Supports both streaming and non-streaming responses
+  # Three-layer pipeline: Regex -> Local SLM -> Custom Keywords
   data_masking:
     enabled: true
+
+    # Custom keywords (Layer 3 - absolute confidential terms)
+    custom_keywords:
+      - "Project-X"
+      - "Shane"
+      - "Operation-Phoenix"
+      - "Intel-Arc-Internal"
+
+    # Local Small Language Model (Layer 2 - semantic detection)
+    local_slm:
+      enabled: true
+      base_url: "http://127.0.0.1:11434/v1"  # Ollama or vLLM endpoint
+      model: "qwen2.5:0.5b-instruct"          # Fast instruction model
+      timeout: 0.5                            # Hard timeout in seconds
+
+    # Built-in regex rules (Layer 1 - pattern matching)
     rules:
       # Email addresses
       - name: "Email"
