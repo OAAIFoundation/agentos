@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LLM Gateway Dashboard</title>
+    <title>Settings - LLM Gateway</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,744 +11,457 @@
     <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 
-    <!-- Lucide Icons CDN -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
     <style>
         [v-cloak] { display: none; }
+
+        /* Chrome Settings Style */
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: #5f6368;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background-color: #f1f3f4;
+        }
+
+        .nav-item.active {
+            color: #1a73e8;
+            background-color: #e8f0fe;
+            border-left-color: #1a73e8;
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 16px;
+        }
+
+        .search-box {
+            border: 1px solid #dadce0;
+            border-radius: 24px;
+            padding: 8px 16px;
+            transition: box-shadow 0.2s;
+        }
+
+        .search-box:focus-within {
+            box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+            border-color: transparent;
+        }
+
+        .settings-section {
+            padding: 24px 0;
+            border-bottom: 1px solid #e8eaed;
+        }
+
+        .settings-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 400;
+            color: #202124;
+            margin-bottom: 16px;
+        }
+
+        .section-description {
+            font-size: 13px;
+            color: #5f6368;
+            margin-bottom: 20px;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+        }
+
+        .setting-label {
+            font-size: 14px;
+            color: #202124;
+        }
+
+        .setting-sublabel {
+            font-size: 12px;
+            color: #5f6368;
+            margin-top: 2px;
+        }
+
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f3f4;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #dadce0;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #bdc1c6;
+        }
+
+        /* Toggle switch (Chrome style) */
+        .toggle-switch {
+            position: relative;
+            width: 36px;
+            height: 14px;
+            background-color: #dadce0;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-switch.active {
+            background-color: #1a73e8;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            top: -3px;
+            left: -2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            transition: left 0.2s;
+        }
+
+        .toggle-switch.active::after {
+            left: 18px;
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 4px;
+        }
+
+        .badge-enabled {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge-disabled {
+            background-color: #f5f5f5;
+            color: #757575;
+        }
+
+        /* Highlight matching search results */
+        .highlight {
+            background-color: #fff9c4;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-white">
     <div id="app" v-cloak>
-        <!-- Top Navigation -->
-        <nav class="bg-white shadow-sm border-b border-gray-200">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex justify-between items-center h-16">
-                    <div class="flex items-center space-x-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        <!-- Header with Search -->
+        <div class="sticky top-0 bg-white border-b border-gray-200 z-10">
+            <div class="flex items-center justify-between px-6 py-4">
+                <div class="flex items-center space-x-4">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <h1 class="text-2xl font-normal text-gray-900">Settings</h1>
+                </div>
+
+                <!-- Search Box -->
+                <div class="search-box flex items-center space-x-2 w-96">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                        v-model="searchQuery"
+                        type="text"
+                        placeholder="Search settings"
+                        class="flex-1 outline-none bg-transparent text-sm"
+                    >
+                    <button v-if="searchQuery" @click="searchQuery = ''" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                        <div>
-                            <h1 class="text-xl font-bold text-gray-900">LLM Gateway Dashboard</h1>
-                            <p class="text-xs text-gray-500">Route & Manage LLM API Providers</p>
-                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex">
+            <!-- Left Sidebar Navigation -->
+            <div class="w-64 border-r border-gray-200 h-screen sticky top-16 overflow-y-auto custom-scrollbar">
+                <nav class="py-4">
+                    <div
+                        v-for="section in navSections"
+                        :key="section.id"
+                        :class="['nav-item', {active: activeSection === section.id}]"
+                        @click="scrollToSection(section.id)"
+                    >
+                        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="section.icon" />
+                        </svg>
+                        <span>{{ section.label }}</span>
                     </div>
-                    <div class="flex items-center space-x-3">
-                        <span v-if="loading" class="text-sm text-gray-500 flex items-center">
-                            <svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Loading...
-                        </span>
-                        <button
-                            @click="reloadConfig"
-                            :disabled="loading"
-                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            <span>Reload Config</span>
+                </nav>
+            </div>
+
+            <!-- Right Content Area -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar h-screen">
+                <div class="max-w-3xl mx-auto px-12 py-6">
+
+                    <!-- Providers Section -->
+                    <div :id="'section-providers'" class="settings-section" v-show="matchesSearch('providers')">
+                        <h2 class="section-title" v-html="highlightText('Providers')"></h2>
+                        <p class="section-description" v-html="highlightText('Configure LLM API providers and their authentication')"></p>
+
+                        <div class="space-y-4">
+                            <div v-for="(provider, name) in filteredProviders" :key="name" class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-medium text-gray-900" v-html="highlightText(name)"></span>
+                                            <span class="badge badge-enabled">Configured</span>
+                                        </div>
+                                        <div class="text-xs text-gray-500 mt-1" v-html="highlightText(provider.base_url)"></div>
+                                    </div>
+                                    <button class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded text-sm font-medium">
+                            + Add Provider
                         </button>
                     </div>
-                </div>
-            </div>
-        </nav>
 
-        <!-- Main Content -->
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <!-- Route Rules Section -->
+                    <div :id="'section-routes'" class="settings-section" v-show="matchesSearch('routes')">
+                        <h2 class="section-title" v-html="highlightText('Route Rules')"></h2>
+                        <p class="section-description" v-html="highlightText('Define routing logic for model selection and provider targeting')"></p>
 
-            <!-- Success/Error Messages -->
-            <div v-if="message" :class="messageClass" class="mb-6 p-4 rounded-lg flex items-center justify-between">
-                <div class="flex items-center space-x-2">
-                    <svg v-if="messageType === 'success'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span>{{ message }}</span>
-                </div>
-                <button @click="message = ''" class="text-gray-500 hover:text-gray-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Providers Section -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
-                <div class="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-900">Providers</h2>
-                        <p class="text-sm text-gray-500">Configure LLM API providers</p>
-                    </div>
-                    <button
-                        @click="addProvider"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span>Add Provider</span>
-                    </button>
-                </div>
-
-                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div v-for="(provider, name) in config.providers" :key="name"
-                         class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
-                        <div class="flex justify-between items-start mb-3">
-                            <input
-                                v-model="provider._name"
-                                @change="renameProvider(name, provider._name)"
-                                class="text-lg font-semibold text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none px-1"
-                                placeholder="Provider name">
-                            <button
-                                @click="deleteProvider(name)"
-                                class="text-red-600 hover:text-red-800 p-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                            </button>
-                        </div>
                         <div class="space-y-2">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Base URL</label>
-                                <input
-                                    v-model="provider.base_url"
-                                    type="text"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="https://api.example.com/v1">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">API Key</label>
-                                <input
-                                    v-model="provider.api_key"
-                                    type="text"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
-                                    placeholder="env:API_KEY or sk-xxx">
+                            <div v-for="(route, index) in filteredRoutes" :key="index" class="setting-row border-b border-gray-100 py-3">
+                                <div>
+                                    <div class="setting-label" v-html="highlightText(route.match_model || '*')"></div>
+                                    <div class="setting-sublabel">→ {{ route.target_provider }} / {{ route.target_model }}</div>
+                                </div>
+                                <button class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Routes Section -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div class="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-900">Routing Rules</h2>
-                        <p class="text-sm text-gray-500">Configure routing logic (first match wins, order matters)</p>
+                        <button class="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded text-sm font-medium">
+                            + Add Route Rule
+                        </button>
                     </div>
-                    <button
-                        @click="addRoute"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span>Add Route</span>
-                    </button>
-                </div>
 
-                <div class="p-6 space-y-4">
-                    <div v-for="(route, index) in config.routes" :key="index"
-                         class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
-                        <div class="flex items-start space-x-3">
-                            <!-- Reorder Buttons -->
-                            <div class="flex flex-col space-y-1 pt-1">
-                                <button
-                                    @click="moveRoute(index, -1)"
-                                    :disabled="index === 0"
-                                    class="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-                                    </svg>
-                                </button>
-                                <button
-                                    @click="moveRoute(index, 1)"
-                                    :disabled="index === config.routes.length - 1"
-                                    class="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
+                    <!-- Privacy Guard Section -->
+                    <div :id="'section-privacy'" class="settings-section" v-show="matchesSearch('privacy')">
+                        <h2 class="section-title" v-html="highlightText('Privacy Guard')"></h2>
+                        <p class="section-description" v-html="highlightText('Protect sensitive data with policy engine and data masking')"></p>
+
+                        <!-- Master Toggle -->
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label" v-html="highlightText('Enable Privacy Guard')"></div>
+                                <div class="setting-sublabel">Policy check, regex audit, and data masking</div>
+                            </div>
+                            <div
+                                :class="['toggle-switch', {active: config.privacy_guard?.enabled}]"
+                                @click="togglePrivacyGuard"
+                            ></div>
+                        </div>
+
+                        <!-- Policy Engine -->
+                        <div class="mt-6">
+                            <h3 class="text-base font-medium text-gray-900 mb-3" v-html="highlightText('Policy Engine')"></h3>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Enable Policies</div>
+                                    <div class="setting-sublabel">Expression-based routing policies</div>
+                                </div>
+                                <div
+                                    :class="['toggle-switch', {active: config.privacy_guard?.policies?.enabled}]"
+                                    @click="togglePolicies"
+                                ></div>
                             </div>
 
-                            <!-- Route Form -->
-                            <div class="flex-1 space-y-3">
-                                <div class="flex items-center space-x-2">
-                                    <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
-                                        Rule {{ index + 1 }}
-                                    </span>
+                            <div v-if="config.privacy_guard?.policies?.enabled" class="ml-4 mt-3 space-y-2">
+                                <div v-for="(policy, index) in filteredPolicies" :key="index" class="text-sm border-l-2 border-blue-200 pl-4 py-2">
+                                    <div class="font-medium text-gray-700" v-html="highlightText(policy.name)"></div>
+                                    <div class="text-xs text-gray-500 mt-1">{{ policy.condition }}</div>
+                                    <div class="text-xs text-blue-600 mt-1">Action: {{ policy.action.type }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Regex Audit -->
+                        <div class="mt-6">
+                            <h3 class="text-base font-medium text-gray-900 mb-3" v-html="highlightText('Regex Audit')"></h3>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Enable Regex Audit</div>
+                                    <div class="setting-sublabel">Pattern-based detection (API keys, credentials)</div>
+                                </div>
+                                <div
+                                    :class="['toggle-switch', {active: config.privacy_guard?.regex_audit?.enabled}]"
+                                    @click="toggleRegexAudit"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <!-- Data Masking -->
+                        <div class="mt-6">
+                            <h3 class="text-base font-medium text-gray-900 mb-3" v-html="highlightText('Data Masking')"></h3>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Enable Data Masking</div>
+                                    <div class="setting-sublabel">Bidirectional PII protection with pseudonymization</div>
+                                </div>
+                                <div
+                                    :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.enabled}]"
+                                    @click="toggleDataMasking"
+                                ></div>
+                            </div>
+
+                            <div v-if="config.privacy_guard?.data_masking?.enabled" class="ml-4 mt-4 space-y-3">
+                                <!-- Use Pseudonyms -->
+                                <div class="setting-row">
+                                    <div>
+                                        <div class="setting-label" v-html="highlightText('Use Pseudonyms')"></div>
+                                        <div class="setting-sublabel">Generate realistic fake names instead of placeholders</div>
+                                    </div>
+                                    <div
+                                        :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.use_pseudonyms}]"
+                                        @click="togglePseudonyms"
+                                    ></div>
                                 </div>
 
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <!-- Mask Images -->
+                                <div class="setting-row">
                                     <div>
-                                        <div class="flex items-center justify-between mb-1">
-                                            <label class="block text-xs font-medium text-gray-700">Match Model Pattern</label>
-                                            <span class="text-xs text-red-600 font-mono">Examples: gpt-4*, claude-*, *</span>
+                                        <div class="setting-label" v-html="highlightText('Mask Images')"></div>
+                                        <div class="setting-sublabel">OCR-based image scanning and pixel-level redaction</div>
+                                    </div>
+                                    <div
+                                        :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.mask_images}]"
+                                        @click="toggleMaskImages"
+                                    ></div>
+                                </div>
+
+                                <!-- Session Management -->
+                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                    <div class="setting-row">
+                                        <div>
+                                            <div class="setting-label" v-html="highlightText('Session Management')"></div>
+                                            <div class="setting-sublabel">Multi-turn conversation state persistence with TTL</div>
                                         </div>
-                                        <input
-                                            v-model="route.match_model"
-                                            type="text"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="gpt-4* or exact name"
-                                            list="pattern-suggestions">
-                                        <datalist id="pattern-suggestions">
-                                            <option value="gpt-4*">All GPT-4 models</option>
-                                            <option value="gpt-4o">Exact: GPT-4o</option>
-                                            <option value="claude-*">All Claude models</option>
-                                            <option value="*">Match all models</option>
-                                        </datalist>
+                                        <div
+                                            :class="['toggle-switch', {active: config.privacy_guard?.data_masking?.session_management?.enabled}]"
+                                            @click="toggleSessionManagement"
+                                        ></div>
                                     </div>
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Keywords (comma-separated)</label>
-                                        <input
-                                            v-model="route._keywords_text"
-                                            @input="updateKeywords(route)"
-                                            type="text"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="translate, summary (optional)">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Target Provider</label>
-                                        <select
-                                            v-model="route.target_provider"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
-                                            <option v-for="(_, providerName) in config.providers" :key="providerName" :value="providerName">
-                                                {{ providerName }}
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Target Model</label>
-                                        <input
-                                            v-model="route.target_model"
-                                            type="text"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="preserve or model name"
-                                            list="model-suggestions">
-                                        <datalist id="model-suggestions">
-                                            <option value="preserve">Keep original model name</option>
-                                            <option value="gpt-4o">OpenAI GPT-4o</option>
-                                            <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
-                                            <option value="gpt-4-turbo">OpenAI GPT-4 Turbo</option>
-                                            <option value="gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</option>
-                                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                            <option value="gemini-2.0-flash-exp">Google Gemini 2.0 Flash</option>
-                                            <option value="gemini-1.5-pro">Google Gemini 1.5 Pro</option>
-                                            <option value="deepseek-chat">DeepSeek Chat</option>
-                                            <option value="deepseek-reasoner">DeepSeek Reasoner</option>
-                                            <option value="qwen-plus">Qwen Plus</option>
-                                            <option value="qwen-turbo">Qwen Turbo</option>
-                                            <option value="llama-3.1-70b-versatile">Llama 3.1 70B</option>
-                                            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                                        </datalist>
+
+                                    <div v-if="config.privacy_guard?.data_masking?.session_management?.enabled" class="ml-4 mt-3 space-y-2 text-sm">
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-600">Session Header</span>
+                                            <span class="font-mono text-gray-900">{{ config.privacy_guard.data_masking.session_management.session_header }}</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-600">TTL (seconds)</span>
+                                            <span class="font-mono text-gray-900">{{ config.privacy_guard.data_masking.session_management.ttl_seconds }}</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-600">Cleanup Interval</span>
+                                            <span class="font-mono text-gray-900">{{ config.privacy_guard.data_masking.session_management.cleanup_interval }}s</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- Delete Button -->
-                            <button
-                                @click="deleteRoute(index)"
-                                class="p-2 text-red-600 hover:text-red-800">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Privacy Guard Section -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 mt-8">
-                <div class="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                    <div>
-                        <h2 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                            </svg>
-                            <span>Privacy Guard</span>
-                        </h2>
-                        <p class="text-sm text-gray-500">Three-layer security: Policy Check, Regex Audit, Data Masking</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            v-model="config.privacy_guard.enabled"
-                            class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                        <span class="ml-3 text-sm font-medium text-gray-700">{{ config.privacy_guard.enabled ? 'Enabled' : 'Disabled' }}</span>
-                    </label>
-                </div>
-
-                <div v-if="config.privacy_guard.enabled" class="p-6 space-y-6">
-                    <!-- Tab Navigation -->
-                    <div class="border-b border-gray-200">
-                        <nav class="-mb-px flex space-x-8">
-                            <button
-                                @click="privacyTab = 'policy'"
-                                :class="privacyTab === 'policy' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Policy Check
-                            </button>
-                            <button
-                                @click="privacyTab = 'audit'"
-                                :class="privacyTab === 'audit' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Regex Audit
-                            </button>
-                            <button
-                                @click="privacyTab = 'masking'"
-                                :class="privacyTab === 'masking' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                                class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Data Masking
-                            </button>
-                        </nav>
-                    </div>
-
-                    <!-- Policy Check Tab -->
-                    <div v-if="privacyTab === 'policy'">
-                        <div class="flex justify-between items-center mb-4">
-                            <div>
-                                <h3 class="text-md font-semibold text-gray-900">Policy Rules (Expression-Based)</h3>
-                                <p class="text-xs text-gray-500">Priority-based policy evaluation with rule-engine expressions</p>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <button
-                                    @click="sortPoliciesByPriority"
-                                    class="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 flex items-center space-x-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-                                    </svg>
-                                    <span>Sort by Priority</span>
-                                </button>
-                                <button
-                                    @click="addPolicyRule"
-                                    class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center space-x-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    <span>Add Rule</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Helper Info Box -->
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs">
-                            <p class="font-semibold text-blue-900 mb-1">Available Context Variables:</p>
-                            <ul class="text-blue-800 space-y-0.5 ml-4">
-                                <li><code class="bg-blue-100 px-1 rounded">model</code> (str), <code class="bg-blue-100 px-1 rounded">prompt_length</code> (int), <code class="bg-blue-100 px-1 rounded">has_attachments</code> (bool), <code class="bg-blue-100 px-1 rounded">attachment_count</code> (int)</li>
-                                <li><code class="bg-blue-100 px-1 rounded">contains_confidential</code>, <code class="bg-blue-100 px-1 rounded">contains_injection</code>, <code class="bg-blue-100 px-1 rounded">contains_credential</code>, <code class="bg-blue-100 px-1 rounded">contains_api_key</code>, <code class="bg-blue-100 px-1 rounded">is_trivial_greeting</code> (bool)</li>
-                            </ul>
-                            <p class="mt-2 text-blue-800"><strong>Operators:</strong> ==, !=, &lt;, &gt;, &lt;=, &gt;=, and, or, not</p>
-                            <p class="mt-1 text-blue-800"><strong>Example:</strong> <code class="bg-blue-100 px-1 rounded">prompt_length > 10000 and model == "gpt-4"</code></p>
-                        </div>
-
-                        <!-- Policy List (sorted by priority descending) -->
-                        <div class="space-y-3">
-                            <div v-for="(rule, index) in sortedPolicies" :key="'policy-' + index"
-                                 class="border border-gray-200 rounded-lg p-4 transition-all"
-                                 :class="{
-                                     'bg-yellow-50 border-yellow-300': isBaselinePolicy(rule),
-                                     'opacity-50': rule.disabled
-                                 }">
-                                <!-- Policy Header -->
-                                <div class="flex justify-between items-start mb-3">
-                                    <div class="flex items-center space-x-3">
-                                        <!-- Enable/Disable Toggle -->
-                                        <label class="relative inline-flex items-center cursor-pointer">
-                                            <input type="checkbox" v-model="rule.enabled" @change="onPolicyToggle(rule)" class="sr-only peer" :checked="rule.enabled !== false">
-                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
-                                        </label>
-
-                                        <!-- Policy Name -->
-                                        <input
-                                            v-model="rule.name"
-                                            type="text"
-                                            class="text-md font-semibold border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none bg-transparent"
-                                            :class="{'line-through text-gray-400': rule.enabled === false}"
-                                            placeholder="Rule name">
-
-                                        <!-- Baseline Badge -->
-                                        <span v-if="isBaselinePolicy(rule)" class="text-xs px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded font-semibold">BASELINE</span>
-
-                                        <!-- Priority Badge -->
-                                        <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-mono font-semibold">
-                                            P{{ rule.priority || 0 }}
+                                <!-- Custom Keywords -->
+                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                    <div class="text-sm font-medium text-gray-700 mb-2" v-html="highlightText('Custom Keywords')"></div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span v-for="keyword in filteredKeywords" :key="keyword"
+                                              class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs"
+                                              v-html="highlightText(keyword)">
                                         </span>
                                     </div>
-
-                                    <button @click="deletePolicyRule(getRuleOriginalIndex(rule))" class="text-red-600 hover:text-red-800">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
+                                    <button class="mt-2 text-blue-600 hover:text-blue-800 text-xs font-medium">
+                                        + Add Keyword
                                     </button>
-                                </div>
-
-                                <!-- Policy Form Fields -->
-                                <div class="grid grid-cols-2 gap-3">
-                                    <!-- Priority -->
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">
-                                            Priority (0-100)
-                                            <span class="text-gray-500 font-normal">- higher = evaluated first</span>
-                                        </label>
-                                        <input v-model.number="rule.priority" type="number" min="0" max="100" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                                    </div>
-
-                                    <!-- Action Type -->
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Action Type</label>
-                                        <select v-model="rule.action.type" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                                            <option value="block">Block</option>
-                                            <option value="log_and_block">Log and Block</option>
-                                            <option value="reroute">Reroute</option>
-                                            <option value="allow">Allow</option>
-                                        </select>
-                                    </div>
-
-                                    <!-- Condition Expression -->
-                                    <div class="col-span-2">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">
-                                            Condition Expression
-                                            <span class="text-gray-500 font-normal">- use rule-engine syntax</span>
-                                        </label>
-                                        <input v-model="rule.condition" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" placeholder='prompt_length > 1000 or contains_injection == true'>
-                                    </div>
-
-                                    <!-- Block Message (if action is block or log_and_block) -->
-                                    <div v-if="rule.action.type === 'block' || rule.action.type === 'log_and_block'" class="col-span-2">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Block Message</label>
-                                        <input v-model="rule.action.message" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Request blocked by policy">
-                                    </div>
-
-                                    <!-- Reroute Options (if action is reroute) -->
-                                    <div v-if="rule.action.type === 'reroute'">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Target Provider</label>
-                                        <select v-model="rule.action.target_provider" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                                            <option v-for="(_, providerName) in config.providers" :key="providerName" :value="providerName">{{ providerName }}</option>
-                                        </select>
-                                    </div>
-
-                                    <div v-if="rule.action.type === 'reroute'">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Target Model</label>
-                                        <input v-model="rule.action.target_model" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="preserve">
-                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Regex Audit Tab -->
-                    <div v-if="privacyTab === 'audit'">
-                        <div class="flex justify-between items-center mb-4">
+                    <!-- Performance Section -->
+                    <div :id="'section-performance'" class="settings-section" v-show="matchesSearch('performance')">
+                        <h2 class="section-title" v-html="highlightText('Performance')"></h2>
+                        <p class="section-description" v-html="highlightText('Monitor gateway performance and resource usage')"></p>
+
+                        <div class="setting-row">
                             <div>
-                                <h3 class="text-md font-semibold text-gray-900">Regex Audit Rules</h3>
-                                <p class="text-xs text-gray-500">Pattern-based detection (block or log)</p>
+                                <div class="setting-label">Hot Reload</div>
+                                <div class="setting-sublabel">Automatically reload config on file changes</div>
                             </div>
-                            <button
-                                @click="addAuditRule"
-                                class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center space-x-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                </svg>
-                                <span>Add Rule</span>
-                            </button>
+                            <span class="badge badge-enabled">Enabled</span>
                         </div>
+
+                        <div class="setting-row">
+                            <div>
+                                <div class="setting-label">Request Timeout</div>
+                                <div class="setting-sublabel">Maximum duration for upstream API calls</div>
+                            </div>
+                            <span class="text-sm text-gray-600">60 seconds</span>
+                        </div>
+                    </div>
+
+                    <!-- About Section -->
+                    <div :id="'section-about'" class="settings-section" v-show="matchesSearch('about')">
+                        <h2 class="section-title" v-html="highlightText('About Gateway')"></h2>
 
                         <div class="space-y-3">
-                            <div v-for="(rule, index) in config.privacy_guard.regex_audit.rules" :key="'audit-' + index"
-                                 class="border border-gray-200 rounded-lg p-4">
-                                <div class="flex justify-between items-start mb-3">
-                                    <input
-                                        v-model="rule.name"
-                                        type="text"
-                                        class="text-md font-semibold border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none"
-                                        placeholder="Rule name">
-                                    <button @click="deleteAuditRule(index)" class="text-red-600 hover:text-red-800">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Version</span>
+                                <span class="text-sm text-gray-600">1.0.0</span>
+                            </div>
 
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div class="col-span-2">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Pattern (Regex)</label>
-                                        <input v-model="rule.pattern" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" placeholder="sk-[a-zA-Z0-9]{20,}">
-                                    </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Repository</span>
+                                <a href="https://github.com/OAAIFoundation/agentos" target="_blank"
+                                   class="text-sm text-blue-600 hover:underline">
+                                    github.com/OAAIFoundation/agentos
+                                </a>
+                            </div>
 
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Action</label>
-                                        <select v-model="rule.action" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
-                                            <option value="block">Block Request</option>
-                                            <option value="log">Log Only</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Message</label>
-                                        <input v-model="rule.message" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Sensitive data detected">
-                                    </div>
-                                </div>
+                            <div class="setting-row">
+                                <span class="setting-label">Documentation</span>
+                                <a href="https://github.com/OAAIFoundation/agentos#readme" target="_blank"
+                                   class="text-sm text-blue-600 hover:underline">
+                                    View README
+                                </a>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Data Masking Tab -->
-                    <div v-if="privacyTab === 'masking'">
-                        <!-- Global Enable/Disable Switch -->
-                        <div class="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-6">
-                            <div class="flex justify-between items-center">
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                        <span>Three-Layer Data Masking Pipeline</span>
-                                    </h3>
-                                    <p class="text-xs text-gray-600 mt-1">
-                                        Bidirectional PII protection: Regex → SLM Semantic → Custom Keywords
-                                    </p>
-                                </div>
-                                <label class="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        v-model="config.privacy_guard.data_masking.enabled"
-                                        @change="onDataMaskingToggle"
-                                        class="sr-only peer">
-                                    <div class="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
-                                    <span class="ml-3 text-sm font-medium" :class="config.privacy_guard.data_masking.enabled ? 'text-purple-700' : 'text-gray-500'">
-                                        {{ config.privacy_guard.data_masking.enabled ? 'Enabled ✓' : 'Disabled' }}
-                                    </span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Content (disabled if global switch off) -->
-                        <div :class="{'opacity-40 pointer-events-none': !config.privacy_guard.data_masking.enabled}">
-
-                            <!-- Layer 1: Built-in Regex Rules -->
-                            <div class="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-                                <div class="flex items-center justify-between mb-4">
-                                    <div class="flex items-center space-x-3">
-                                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                            <span class="text-blue-700 font-bold text-sm">1</span>
-                                        </div>
-                                        <div>
-                                            <h4 class="text-md font-semibold text-gray-900">Layer 1: Built-in Regex Rules</h4>
-                                            <p class="text-xs text-gray-500">Physical format privacy (email, phone, SSN, API keys)</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        @click="addMaskingRule"
-                                        class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 flex items-center space-x-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                        </svg>
-                                        <span>Add Rule</span>
-                                    </button>
-                                </div>
-
-                                <!-- Regex Rules List -->
-                                <div class="space-y-3">
-                                    <div v-for="(rule, index) in config.privacy_guard.data_masking.rules" :key="'mask-' + index"
-                                         class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
-                                        <div class="flex justify-between items-start mb-3">
-                                            <div class="flex items-center space-x-2">
-                                                <input type="checkbox" :checked="!rule.disabled" @change="toggleMaskingRule(rule)" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                                                <input
-                                                    v-model="rule.name"
-                                                    type="text"
-                                                    class="text-md font-semibold border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none"
-                                                    :class="{'line-through text-gray-400': rule.disabled}"
-                                                    placeholder="Rule name">
-                                            </div>
-                                            <button @click="deleteMaskingRule(index)" class="text-red-600 hover:text-red-800">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </div>
-
-                                        <div class="grid grid-cols-2 gap-3">
-                                            <div class="col-span-2">
-                                                <label class="block text-xs font-medium text-gray-700 mb-1">Pattern (Regex)</label>
-                                                <input v-model="rule.pattern" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" placeholder="\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b">
-                                            </div>
-
-                                            <div>
-                                                <label class="block text-xs font-medium text-gray-700 mb-1">Entity Type</label>
-                                                <input v-model="rule.entity_type" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="email">
-                                            </div>
-
-                                            <div>
-                                                <label class="block text-xs font-medium text-gray-700 mb-1">Placeholder Prefix</label>
-                                                <input v-model="rule.placeholder_prefix" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" placeholder="[REDACTED_EMAIL_">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Layer 2: Local SLM Semantic Detection -->
-                            <div class="bg-white border border-indigo-200 rounded-lg p-5 mb-6">
-                                <div class="flex items-center justify-between mb-4">
-                                    <div class="flex items-center space-x-3">
-                                        <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
-                                            <span class="text-indigo-700 font-bold text-sm">2</span>
-                                        </div>
-                                        <div>
-                                            <h4 class="text-md font-semibold text-gray-900">Layer 2: Local SLM Semantic Detection</h4>
-                                            <p class="text-xs text-gray-500">AI-powered detection of business secrets & product codenames</p>
-                                        </div>
-                                    </div>
-                                    <label class="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            v-model="config.privacy_guard.data_masking.local_slm.enabled"
-                                            class="sr-only peer">
-                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                                        <span class="ml-3 text-sm font-medium text-gray-700">{{ config.privacy_guard.data_masking.local_slm.enabled ? 'Enabled' : 'Disabled' }}</span>
-                                    </label>
-                                </div>
-
-                                <!-- SLM Configuration -->
-                                <div class="grid grid-cols-3 gap-4 mb-3">
-                                    <div class="col-span-2">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Base URL</label>
-                                        <input
-                                            v-model="config.privacy_guard.data_masking.local_slm.base_url"
-                                            type="text"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-                                            placeholder="http://127.0.0.1:11434/v1"
-                                            :disabled="!config.privacy_guard.data_masking.local_slm.enabled">
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Timeout (seconds)</label>
-                                        <input
-                                            v-model.number="config.privacy_guard.data_masking.local_slm.timeout"
-                                            type="number"
-                                            step="0.1"
-                                            min="0.1"
-                                            max="10"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                                            placeholder="0.5"
-                                            :disabled="!config.privacy_guard.data_masking.local_slm.enabled">
-                                    </div>
-
-                                    <div class="col-span-2">
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">Model Name</label>
-                                        <input
-                                            v-model="config.privacy_guard.data_masking.local_slm.model"
-                                            type="text"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-                                            placeholder="qwen2.5:0.5b-instruct"
-                                            :disabled="!config.privacy_guard.data_masking.local_slm.enabled">
-                                    </div>
-
-                                    <div class="flex items-end">
-                                        <button
-                                            @click="testSLMConnection"
-                                            :disabled="!config.privacy_guard.data_masking.local_slm.enabled || slmTesting"
-                                            class="w-full px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2">
-                                            <svg v-if="slmTesting" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                            </svg>
-                                            <span>{{ slmTesting ? 'Testing...' : 'Test Connection' }}</span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- SLM Status Indicator -->
-                                <div v-if="slmStatus" class="flex items-center space-x-2 text-sm p-3 rounded-md"
-                                     :class="slmStatus.online ? 'bg-green-50 text-green-800' : 'bg-gray-50 text-gray-600'">
-                                    <div class="w-2 h-2 rounded-full" :class="slmStatus.online ? 'bg-green-500' : 'bg-gray-400'"></div>
-                                    <span class="font-medium">{{ slmStatus.online ? '● Online' : '● Offline' }}</span>
-                                    <span class="text-xs">{{ slmStatus.message }}</span>
-                                </div>
-                            </div>
-
-                            <!-- Layer 3: Custom Keywords Manager -->
-                            <div class="bg-white border border-red-200 rounded-lg p-5">
-                                <div class="flex items-center space-x-3 mb-4">
-                                    <div class="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                                        <span class="text-red-700 font-bold text-sm">3</span>
-                                    </div>
-                                    <div>
-                                        <h4 class="text-md font-semibold text-gray-900">Layer 3: Custom Keywords (核心机密词)</h4>
-                                        <p class="text-xs text-gray-500">Absolute confidential terms for your organization</p>
-                                    </div>
-                                </div>
-
-                                <!-- Keyword Input -->
-                                <div class="flex items-center space-x-2 mb-3">
-                                    <input
-                                        v-model="newKeyword"
-                                        @keyup.enter="addKeyword"
-                                        type="text"
-                                        class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-red-500 focus:border-red-500"
-                                        placeholder="Type keyword and press Enter (e.g., Project-X, Internal-Code)">
-                                    <button
-                                        @click="addKeyword"
-                                        class="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 flex items-center space-x-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                        </svg>
-                                        <span>Add</span>
-                                    </button>
-                                </div>
-
-                                <!-- Keywords Tags -->
-                                <div class="flex flex-wrap gap-2">
-                                    <div v-for="(keyword, index) in config.privacy_guard.data_masking.custom_keywords" :key="'keyword-' + index"
-                                         class="inline-flex items-center space-x-2 px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium border border-red-300">
-                                        <span>{{ keyword }}</span>
-                                        <button
-                                            @click="deleteKeyword(index)"
-                                            class="text-red-600 hover:text-red-900">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div v-if="!config.privacy_guard.data_masking.custom_keywords || config.privacy_guard.data_masking.custom_keywords.length === 0"
-                                         class="text-sm text-gray-400 italic">
-                                        No custom keywords yet. Add your confidential terms above.
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
                 </div>
             </div>
-
-            <!-- Save & Apply Button -->
-            <div class="mt-8 flex justify-center">
-                <button
-                    @click="saveConfig"
-                    :disabled="loading"
-                    class="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-lg font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                    </svg>
-                    <span>Save & Apply Configuration</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                </button>
-            </div>
-            <p class="text-center text-sm text-gray-500 mt-3">
-                Changes will be saved to file and applied immediately (hot reload)
-            </p>
         </div>
     </div>
 
@@ -758,529 +471,201 @@
         createApp({
             data() {
                 return {
-                    config: {
-                        providers: {},
-                        routes: [],
-                        privacy_guard: {
-                            enabled: false,
-                            policy_check: { enabled: true, rules: [] },
-                            regex_audit: { enabled: true, rules: [] },
-                            data_masking: {
-                                enabled: true,
-                                custom_keywords: [],
-                                local_slm: {
-                                    enabled: false,
-                                    base_url: 'http://127.0.0.1:11434/v1',
-                                    model: 'qwen2.5:0.5b-instruct',
-                                    timeout: 0.5
-                                },
-                                rules: []
-                            }
-                        }
-                    },
+                    config: {},
                     loading: false,
-                    message: '',
-                    messageType: 'success',
-                    privacyTab: 'policy',
-                    newKeyword: '',
-                    slmStatus: null,
-                    slmTesting: false
+                    activeSection: 'providers',
+                    searchQuery: '',
+                    navSections: [
+                        {
+                            id: 'providers',
+                            label: 'Providers',
+                            icon: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01'
+                        },
+                        {
+                            id: 'routes',
+                            label: 'Route Rules',
+                            icon: 'M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z'
+                        },
+                        {
+                            id: 'privacy',
+                            label: 'Privacy Guard',
+                            icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z'
+                        },
+                        {
+                            id: 'performance',
+                            label: 'Performance',
+                            icon: 'M13 10V3L4 14h7v7l9-11h-7z'
+                        },
+                        {
+                            id: 'about',
+                            label: 'About Gateway',
+                            icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+                        }
+                    ]
                 };
             },
             computed: {
-                messageClass() {
-                    return this.messageType === 'success'
-                        ? 'bg-green-50 border border-green-200 text-green-800'
-                        : 'bg-red-50 border border-red-200 text-red-800';
-                },
+                filteredProviders() {
+                    if (!this.searchQuery || !this.config.providers) return this.config.providers;
 
-                // Sorted policies by priority (descending) and severity
-                sortedPolicies() {
-                    if (!this.config.privacy_guard.policies || !this.config.privacy_guard.policies.rules) {
-                        return [];
+                    const query = this.searchQuery.toLowerCase();
+                    const filtered = {};
+
+                    for (const [name, provider] of Object.entries(this.config.providers)) {
+                        if (name.toLowerCase().includes(query) ||
+                            provider.base_url.toLowerCase().includes(query)) {
+                            filtered[name] = provider;
+                        }
                     }
 
-                    const ACTION_SEVERITY_MAP = {
-                        "block": 100,
-                        "log_and_block": 90,
-                        "reroute": 50,
-                        "allow": 0
-                    };
+                    return filtered;
+                },
 
-                    // Create a copy to avoid mutating original array
-                    return [...this.config.privacy_guard.policies.rules].sort((a, b) => {
-                        const priorityA = a.priority || 0;
-                        const priorityB = b.priority || 0;
+                filteredRoutes() {
+                    if (!this.searchQuery || !this.config.routes) return this.config.routes || [];
 
-                        // First sort by priority (higher first)
-                        if (priorityA !== priorityB) {
-                            return priorityB - priorityA;
-                        }
+                    const query = this.searchQuery.toLowerCase();
+                    return this.config.routes.filter(route => {
+                        return (route.match_model && route.match_model.toLowerCase().includes(query)) ||
+                               route.target_provider.toLowerCase().includes(query) ||
+                               route.target_model.toLowerCase().includes(query);
+                    });
+                },
 
-                        // If priority equal, sort by severity (higher first)
-                        const severityA = ACTION_SEVERITY_MAP[a.action?.type] || 0;
-                        const severityB = ACTION_SEVERITY_MAP[b.action?.type] || 0;
-                        return severityB - severityA;
+                filteredPolicies() {
+                    if (!this.searchQuery || !this.config.privacy_guard?.policies?.rules) {
+                        return this.config.privacy_guard?.policies?.rules || [];
+                    }
+
+                    const query = this.searchQuery.toLowerCase();
+                    return this.config.privacy_guard.policies.rules.filter(policy => {
+                        return policy.name.toLowerCase().includes(query) ||
+                               policy.condition.toLowerCase().includes(query);
+                    });
+                },
+
+                filteredKeywords() {
+                    if (!this.searchQuery || !this.config.privacy_guard?.data_masking?.custom_keywords) {
+                        return this.config.privacy_guard?.data_masking?.custom_keywords || [];
+                    }
+
+                    const query = this.searchQuery.toLowerCase();
+                    return this.config.privacy_guard.data_masking.custom_keywords.filter(keyword => {
+                        return keyword.toLowerCase().includes(query);
                     });
                 }
             },
             mounted() {
                 this.loadConfig();
+
+                // Intersection Observer for active section tracking
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const sectionId = entry.target.id.replace('section-', '');
+                            this.activeSection = sectionId;
+                        }
+                    });
+                }, { threshold: 0.5 });
+
+                this.$nextTick(() => {
+                    document.querySelectorAll('.settings-section').forEach(section => {
+                        observer.observe(section);
+                    });
+                });
             },
             methods: {
                 async loadConfig() {
                     this.loading = true;
                     try {
                         const response = await fetch('/api/config');
-                        if (!response.ok) throw new Error('Failed to load config');
-
-                        const data = await response.json();
-
-                        // Add _name field for providers
-                        if (data.providers) {
-                            for (const [name, provider] of Object.entries(data.providers)) {
-                                provider._name = name;
-                            }
-                        }
-
-                        // Convert keywords array to comma-separated string
-                        if (data.routes) {
-                            data.routes.forEach(route => {
-                                route._keywords_text = Array.isArray(route.contains_keywords)
-                                    ? route.contains_keywords.join(', ')
-                                    : '';
-                            });
-                        }
-
-                        // Initialize privacy_guard if missing
-                        if (!data.privacy_guard) {
-                            data.privacy_guard = {
-                                enabled: false,
-                                policies: { enabled: true, rules: [] },
-                                regex_audit: { enabled: true, rules: [] },
-                                data_masking: {
-                                    enabled: true,
-                                    custom_keywords: [],
-                                    local_slm: {
-                                        enabled: false,
-                                        base_url: 'http://127.0.0.1:11434/v1',
-                                        model: 'qwen2.5:0.5b-instruct',
-                                        timeout: 0.5
-                                    },
-                                    rules: []
-                                }
-                            };
-                        }
-
-                        // Ensure data_masking structure is complete
-                        if (data.privacy_guard.data_masking) {
-                            if (!data.privacy_guard.data_masking.custom_keywords) {
-                                data.privacy_guard.data_masking.custom_keywords = [];
-                            }
-                            if (!data.privacy_guard.data_masking.local_slm) {
-                                data.privacy_guard.data_masking.local_slm = {
-                                    enabled: false,
-                                    base_url: 'http://127.0.0.1:11434/v1',
-                                    model: 'qwen2.5:0.5b-instruct',
-                                    timeout: 0.5
-                                };
-                            }
-                        }
-
-                        // Migrate old policy_check to new policies structure
-                        if (data.privacy_guard.policy_check && !data.privacy_guard.policies) {
-                            data.privacy_guard.policies = data.privacy_guard.policy_check;
-                        }
-
-                        // Ensure policies structure exists
-                        if (!data.privacy_guard.policies) {
-                            data.privacy_guard.policies = { enabled: true, rules: [] };
-                        }
-
-                        // Ensure all rules have action as object (not string)
-                        if (data.privacy_guard.policies && data.privacy_guard.policies.rules) {
-                            data.privacy_guard.policies.rules.forEach(rule => {
-                                // Convert old string action to new object format
-                                if (typeof rule.action === 'string') {
-                                    const oldAction = rule.action;
-                                    rule.action = { type: oldAction };
-                                    if (oldAction === 'block') {
-                                        rule.action.message = rule.block_message || 'Request blocked';
-                                    } else if (oldAction === 'reroute') {
-                                        rule.action.target_provider = rule.target_provider || 'openai';
-                                        rule.action.target_model = rule.target_model || 'preserve';
-                                    }
-                                }
-                                // Ensure priority exists (as integer)
-                                if (rule.priority === undefined) {
-                                    rule.priority = 0;
-                                } else {
-                                    rule.priority = parseInt(rule.priority) || 0;
-                                }
-                                // Default enabled to true if not specified
-                                if (rule.enabled === undefined) {
-                                    rule.enabled = true;
-                                }
-                            });
-                        }
-
-                        this.config = data;
-                        this.showMessage('Configuration loaded successfully', 'success');
+                        this.config = await response.json();
                     } catch (error) {
-                        this.showMessage('Failed to load configuration: ' + error.message, 'error');
+                        console.error('Failed to load config:', error);
                     } finally {
                         this.loading = false;
                     }
                 },
 
-                async saveConfig() {
-                    this.loading = true;
-                    try {
-                        // Clean up config before sending
-                        const cleanConfig = JSON.parse(JSON.stringify(this.config));
-
-                        // Remove _name fields and rebuild providers object
-                        const cleanProviders = {};
-                        for (const [name, provider] of Object.entries(cleanConfig.providers)) {
-                            const cleanProvider = { ...provider };
-                            const actualName = cleanProvider._name || name;
-                            delete cleanProvider._name;
-                            cleanProviders[actualName] = cleanProvider;
-                        }
-                        cleanConfig.providers = cleanProviders;
-
-                        // Remove _keywords_text and ensure contains_keywords is array
-                        cleanConfig.routes.forEach(route => {
-                            delete route._keywords_text;
-                            if (!Array.isArray(route.contains_keywords)) {
-                                route.contains_keywords = [];
-                            }
-                        });
-
-                        // Ensure all policy priorities are integers
-                        if (cleanConfig.privacy_guard?.policies?.rules) {
-                            cleanConfig.privacy_guard.policies.rules.forEach(rule => {
-                                rule.priority = parseInt(rule.priority) || 0;
-                                // Remove enabled field if true (default), keep if false
-                                if (rule.enabled === true || rule.enabled === undefined) {
-                                    delete rule.enabled;
-                                }
-                            });
-                        }
-
-                        // Step 1: Save configuration to file
-                        const saveResponse = await fetch('/api/config', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(cleanConfig)
-                        });
-
-                        if (!saveResponse.ok) {
-                            const error = await saveResponse.json();
-                            throw new Error(error.detail || 'Failed to save config');
-                        }
-
-                        // Step 2: Trigger hot reload (apply changes immediately)
-                        const reloadResponse = await fetch('/api/reload', {
-                            method: 'POST'
-                        });
-
-                        if (!reloadResponse.ok) {
-                            throw new Error('Config saved but hot reload failed');
-                        }
-
-                        // Success message
-                        this.showMessage('Configuration saved and applied! Changes are live.', 'success');
-
-                        // Reload config from backend to sync UI
-                        await this.loadConfig();
-                    } catch (error) {
-                        this.showMessage('Failed to save configuration: ' + error.message, 'error');
-                    } finally {
-                        this.loading = false;
+                scrollToSection(sectionId) {
+                    const element = document.getElementById('section-' + sectionId);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                 },
 
-                async reloadConfig() {
-                    this.loading = true;
-                    try {
-                        const response = await fetch('/api/reload', { method: 'POST' });
-                        if (!response.ok) throw new Error('Failed to reload config');
+                matchesSearch(sectionId) {
+                    if (!this.searchQuery) return true;
 
-                        this.showMessage('Configuration reloaded successfully!', 'success');
-                        await this.loadConfig();
-                    } catch (error) {
-                        this.showMessage('Failed to reload configuration: ' + error.message, 'error');
-                    } finally {
-                        this.loading = false;
+                    const section = this.navSections.find(s => s.id === sectionId);
+                    if (!section) return true;
+
+                    const query = this.searchQuery.toLowerCase();
+
+                    // Check section label
+                    if (section.label.toLowerCase().includes(query)) return true;
+
+                    // Check specific content based on section
+                    if (sectionId === 'providers') {
+                        return Object.keys(this.filteredProviders).length > 0;
+                    } else if (sectionId === 'routes') {
+                        return this.filteredRoutes.length > 0;
+                    } else if (sectionId === 'privacy') {
+                        const keywords = ['privacy', 'guard', 'masking', 'policy', 'regex', 'session', 'pseudonym', 'pii'];
+                        return keywords.some(keyword => keyword.includes(query) || query.includes(keyword));
+                    }
+
+                    return true;
+                },
+
+                highlightText(text) {
+                    if (!this.searchQuery || !text) return text;
+
+                    const query = this.searchQuery;
+                    const regex = new RegExp(`(${query})`, 'gi');
+                    return text.replace(regex, '<span class="highlight">$1</span>');
+                },
+
+                togglePrivacyGuard() {
+                    if (this.config.privacy_guard) {
+                        this.config.privacy_guard.enabled = !this.config.privacy_guard.enabled;
                     }
                 },
 
-                addProvider() {
-                    const name = `new_provider_${Date.now()}`;
-                    this.config.providers[name] = {
-                        _name: name,
-                        base_url: 'https://api.example.com/v1',
-                        api_key: 'env:API_KEY'
-                    };
-                },
-
-                deleteProvider(name) {
-                    if (confirm(`Delete provider "${name}"?`)) {
-                        delete this.config.providers[name];
+                togglePolicies() {
+                    if (this.config.privacy_guard?.policies) {
+                        this.config.privacy_guard.policies.enabled = !this.config.privacy_guard.policies.enabled;
                     }
                 },
 
-                renameProvider(oldName, newName) {
-                    if (oldName === newName) return;
-                    if (!newName || newName.trim() === '') {
-                        alert('Provider name cannot be empty');
-                        return;
-                    }
-                    if (this.config.providers[newName]) {
-                        alert('Provider name already exists');
-                        return;
-                    }
-
-                    const provider = this.config.providers[oldName];
-                    delete this.config.providers[oldName];
-                    this.config.providers[newName] = provider;
-                    provider._name = newName;
-                },
-
-                addRoute() {
-                    this.config.routes.push({
-                        match_model: 'gpt-*',
-                        contains_keywords: [],
-                        _keywords_text: '',
-                        target_provider: Object.keys(this.config.providers)[0] || '',
-                        target_model: 'preserve'
-                    });
-                },
-
-                deleteRoute(index) {
-                    if (confirm(`Delete rule ${index + 1}?`)) {
-                        this.config.routes.splice(index, 1);
+                toggleRegexAudit() {
+                    if (this.config.privacy_guard?.regex_audit) {
+                        this.config.privacy_guard.regex_audit.enabled = !this.config.privacy_guard.regex_audit.enabled;
                     }
                 },
 
-                moveRoute(index, direction) {
-                    const newIndex = index + direction;
-                    if (newIndex < 0 || newIndex >= this.config.routes.length) return;
-
-                    const routes = this.config.routes;
-                    [routes[index], routes[newIndex]] = [routes[newIndex], routes[index]];
-                },
-
-                updateKeywords(route) {
-                    const text = route._keywords_text || '';
-                    route.contains_keywords = text
-                        .split(',')
-                        .map(k => k.trim())
-                        .filter(k => k.length > 0);
-                },
-
-                showMessage(message, type) {
-                    this.message = message;
-                    this.messageType = type;
-                    setTimeout(() => {
-                        this.message = '';
-                    }, 5000);
-                },
-
-                // ============== Privacy Guard Methods ==============
-
-                // Check if policy is a baseline policy (one of the first 4 by name)
-                isBaselinePolicy(rule) {
-                    const baselineNames = [
-                        'Prevent_Cost_Blowout',
-                        'Prevent_Prompt_Injection',
-                        'Block_API_Keys',
-                        'Trivial_Task_Downgrade'
-                    ];
-                    return baselineNames.includes(rule.name);
-                },
-
-                // Get original index of a rule in unsorted array
-                getRuleOriginalIndex(rule) {
-                    return this.config.privacy_guard.policies.rules.findIndex(r => r === rule);
-                },
-
-                // Toggle policy enabled/disabled
-                onPolicyToggle(rule) {
-                    // Ensure enabled field exists (default to true if undefined)
-                    if (rule.enabled === undefined) {
-                        rule.enabled = false;
-                    }
-                    console.log(`Policy "${rule.name}" ${rule.enabled ? 'enabled' : 'disabled'}`);
-                },
-
-                // Sort policies by priority
-                sortPoliciesByPriority() {
-                    const ACTION_SEVERITY_MAP = {
-                        "block": 100,
-                        "log_and_block": 90,
-                        "reroute": 50,
-                        "allow": 0
-                    };
-
-                    this.config.privacy_guard.policies.rules.sort((a, b) => {
-                        const priorityA = a.priority || 0;
-                        const priorityB = b.priority || 0;
-
-                        if (priorityA !== priorityB) {
-                            return priorityB - priorityA;
-                        }
-
-                        const severityA = ACTION_SEVERITY_MAP[a.action?.type] || 0;
-                        const severityB = ACTION_SEVERITY_MAP[b.action?.type] || 0;
-                        return severityB - severityA;
-                    });
-
-                    this.showMessage('Policies sorted by priority (high to low)', 'success');
-                },
-
-                addPolicyRule() {
-                    this.config.privacy_guard.policies.rules.push({
-                        name: 'New Custom Policy',
-                        priority: 10,
-                        enabled: true,
-                        condition: 'prompt_length > 1000',
-                        action: {
-                            type: 'block',
-                            message: 'Request blocked by policy'
-                        }
-                    });
-                },
-
-                deletePolicyRule(index) {
-                    const rule = this.config.privacy_guard.policies.rules[index];
-                    const isBaseline = this.isBaselinePolicy(rule);
-                    const confirmMsg = isBaseline
-                        ? `Delete BASELINE policy "${rule.name}"? This is a predefined security rule.`
-                        : `Delete custom policy "${rule.name}"?`;
-
-                    if (confirm(confirmMsg)) {
-                        this.config.privacy_guard.policies.rules.splice(index, 1);
+                toggleDataMasking() {
+                    if (this.config.privacy_guard?.data_masking) {
+                        this.config.privacy_guard.data_masking.enabled = !this.config.privacy_guard.data_masking.enabled;
                     }
                 },
 
-                addAuditRule() {
-                    this.config.privacy_guard.regex_audit.rules.push({
-                        name: 'New Audit Rule',
-                        pattern: 'sk-[a-zA-Z0-9]{20,}',
-                        action: 'block',
-                        message: 'Sensitive pattern detected'
-                    });
-                },
-
-                deleteAuditRule(index) {
-                    if (confirm(`Delete audit rule ${index + 1}?`)) {
-                        this.config.privacy_guard.regex_audit.rules.splice(index, 1);
+                togglePseudonyms() {
+                    if (this.config.privacy_guard?.data_masking) {
+                        this.config.privacy_guard.data_masking.use_pseudonyms = !this.config.privacy_guard.data_masking.use_pseudonyms;
                     }
                 },
 
-                addMaskingRule() {
-                    this.config.privacy_guard.data_masking.rules.push({
-                        name: 'New Masking Rule',
-                        pattern: '\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b',
-                        placeholder_prefix: '[REDACTED_EMAIL_',
-                        entity_type: 'email'
-                    });
-                },
-
-                deleteMaskingRule(index) {
-                    if (confirm(`Delete masking rule ${index + 1}?`)) {
-                        this.config.privacy_guard.data_masking.rules.splice(index, 1);
+                toggleMaskImages() {
+                    if (this.config.privacy_guard?.data_masking) {
+                        this.config.privacy_guard.data_masking.mask_images = !this.config.privacy_guard.data_masking.mask_images;
                     }
                 },
 
-                toggleMaskingRule(rule) {
-                    rule.disabled = !rule.disabled;
-                },
-
-                onDataMaskingToggle() {
-                    if (!this.config.privacy_guard.data_masking.enabled) {
-                        this.slmStatus = null;
-                    }
-                },
-
-                // Custom Keywords Management
-                addKeyword() {
-                    const keyword = this.newKeyword.trim();
-                    if (!keyword) {
-                        return;
-                    }
-                    if (!this.config.privacy_guard.data_masking.custom_keywords) {
-                        this.config.privacy_guard.data_masking.custom_keywords = [];
-                    }
-                    if (this.config.privacy_guard.data_masking.custom_keywords.includes(keyword)) {
-                        this.showMessage(`Keyword "${keyword}" already exists`, 'error');
-                        return;
-                    }
-                    this.config.privacy_guard.data_masking.custom_keywords.push(keyword);
-                    this.newKeyword = '';
-                    this.showMessage(`Added keyword: ${keyword}`, 'success');
-                },
-
-                deleteKeyword(index) {
-                    const keyword = this.config.privacy_guard.data_masking.custom_keywords[index];
-                    if (confirm(`Delete keyword "${keyword}"?`)) {
-                        this.config.privacy_guard.data_masking.custom_keywords.splice(index, 1);
-                        this.showMessage(`Deleted keyword: ${keyword}`, 'success');
-                    }
-                },
-
-                // Local SLM Connection Test
-                async testSLMConnection() {
-                    this.slmTesting = true;
-                    this.slmStatus = null;
-
-                    const baseUrl = this.config.privacy_guard.data_masking.local_slm.base_url;
-                    const timeout = this.config.privacy_guard.data_masking.local_slm.timeout * 1000;
-
-                    try {
-                        // Test health endpoint
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-                        const response = await fetch(`${baseUrl}/models`, {
-                            method: 'GET',
-                            signal: controller.signal
-                        });
-
-                        clearTimeout(timeoutId);
-
-                        if (response.ok) {
-                            this.slmStatus = {
-                                online: true,
-                                message: `Connected successfully! Model endpoint is reachable.`
-                            };
-                            this.showMessage('SLM connection test passed ✓', 'success');
-                        } else {
-                            this.slmStatus = {
-                                online: false,
-                                message: `Server responded with status ${response.status}`
-                            };
-                            this.showMessage('SLM connection failed', 'error');
-                        }
-                    } catch (error) {
-                        let message = 'Connection failed';
-                        if (error.name === 'AbortError') {
-                            message = `Timeout after ${this.config.privacy_guard.data_masking.local_slm.timeout}s`;
-                        } else if (error.message.includes('fetch')) {
-                            message = 'Cannot reach endpoint (check URL and network)';
-                        } else {
-                            message = error.message;
-                        }
-
-                        this.slmStatus = {
-                            online: false,
-                            message: message
-                        };
-                        this.showMessage(`SLM test failed: ${message}`, 'error');
-                    } finally {
-                        this.slmTesting = false;
+                toggleSessionManagement() {
+                    if (this.config.privacy_guard?.data_masking?.session_management) {
+                        this.config.privacy_guard.data_masking.session_management.enabled =
+                            !this.config.privacy_guard.data_masking.session_management.enabled;
                     }
                 }
             }
