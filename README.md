@@ -126,6 +126,66 @@ routes:
 
 **Edit via Dashboard:** http://localhost:8000/dashboard
 
+## 🌐 Provider Support
+
+AgentOS supports **18 LLM providers** with intelligent routing and API format adaptation.
+
+### Provider Support Matrix
+
+| Provider | Status | API Format | Auth Method | Notes |
+|----------|--------|------------|-------------|-------|
+| **OpenAI** | ✅ Full | OpenAI | Bearer Token | Native support |
+| **Anthropic** | ✅ Full | Custom | x-api-key header | Auto-adapted |
+| **Google Gemini** | ⚠️ Partial | Custom | URL param | Auto-adapted |
+| **DeepSeek** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Qwen (Alibaba)** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Zhipu (GLM)** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Moonshot** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Baidu** | ⚠️ Partial | Custom | Access Token | Requires OAuth |
+| **MiniMax** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Groq** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Together AI** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Replicate** | ✅ Full | OpenAI | Bearer Token | OpenAI proxy |
+| **Cohere** | ⚠️ Partial | Custom | Bearer Token | May need adapter |
+| **Mistral AI** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Perplexity** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Ollama** | ✅ Full | OpenAI | None | Local, no auth |
+| **vLLM** | ✅ Full | OpenAI | None/Custom | Local deployment |
+| **LM Studio** | ✅ Full | OpenAI | None | Local, no auth |
+
+**Summary:** 15/18 providers have full support. 3 providers (Anthropic, Google Gemini, Baidu) have partial support with auto-adapters.
+
+### Support Levels
+
+**✅ Full Support (15 providers)**
+- Request interception & model replacement
+- Keyword-based routing
+- Streaming (SSE) passthrough
+- Transparent error handling
+
+**⚠️ Partial Support (3 providers)**
+- Anthropic Claude: Auto-adapter for `/messages` endpoint
+- Google Gemini: Auto-adapter for custom format
+- Baidu ERNIE: Requires OAuth 2.0 (basic support)
+
+### Adding New Providers
+
+**For OpenAI-Compatible Providers:**
+```yaml
+providers:
+  new_provider:
+    base_url: "https://api.example.com/v1"
+    api_key: "env:NEW_PROVIDER_API_KEY"
+```
+
+Then add to `.env`:
+```bash
+NEW_PROVIDER_API_KEY=your-key-here
+```
+
+**For Custom API Formats:**
+Implement adapter function in `gateway.py` - see Anthropic/Gemini adapters as examples.
+
 ## 🎯 Usage Examples
 
 ### Python SDK
