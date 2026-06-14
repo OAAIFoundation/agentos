@@ -7,16 +7,37 @@ Three-Layer Pipeline Architecture:
   Layer 1: Built-in Regex (email, phone, SSN, etc.)
   Layer 2: Local SLM Semantic Detection (optional, with graceful degradation)
   Layer 3: Custom Keywords (absolute confidential terms)
+
+Multimodal Extensions:
+  - OCR-based image scanning (EasyOCR)
+  - Pixel-level blackout box masking (Pillow)
 """
 
 import re
 import json
+import base64
+import io
 import logging
 import httpx
-from typing import Dict, Tuple, List, Optional, AsyncIterator
+from typing import Dict, Tuple, List, Optional, AsyncIterator, Any
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+# Lazy imports for optional dependencies
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PILLOW_AVAILABLE = True
+except ImportError:
+    PILLOW_AVAILABLE = False
+    logger.warning("[DataMasker] Pillow not available - image masking disabled")
+
+try:
+    import easyocr
+    EASYOCR_AVAILABLE = True
+except ImportError:
+    EASYOCR_AVAILABLE = False
+    logger.warning("[DataMasker] EasyOCR not available - image masking disabled")
 
 
 # ======================== Data Structures ========================
@@ -95,6 +116,10 @@ class DataMasker:
         self.slm_timeout = 0.5
         self.is_slm_available = False
 
+        # Multimodal: Image masking configuration
+        self.mask_images = config.get('mask_images', False)
+        self.ocr_reader = None
+
         if not self.enabled:
             logger.info("[DataMasker] Data masking disabled")
             return
@@ -120,7 +145,21 @@ class DataMasker:
         self.slm_timeout = slm_config.get('timeout', 0.5)
 
         logger.info(f"[DataMasker] Initialized with {len(self.rules)} regex rules, "
-                   f"{len(self.custom_keywords)} custom keywords")
+                   f"{len(self.custom_keywords)} custom keywords, "
+                   f"image_masking={'enabled' if self.mask_images else 'disabled'}")
+
+        # Initialize OCR reader if image masking is enabled
+        if self.mask_images and EASYOCR_AVAILABLE and PILLOW_AVAILABLE:
+            try:
+                logger.info("[DataMasker] Initializing EasyOCR reader (ch_sim, en)...")
+                self.ocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False, verbose=False)
+                logger.info("[DataMasker] OCR reader initialized successfully")
+            except Exception as e:
+                logger.warning(f"[DataMasker] Failed to initialize OCR reader: {e}")
+                self.mask_images = False
+        elif self.mask_images:
+            logger.warning("[DataMasker] Image masking enabled but dependencies missing (Pillow/EasyOCR)")
+            self.mask_images = False
 
         # Health check for local SLM
         if self.slm_enabled and self.slm_base_url:
@@ -334,6 +373,149 @@ class DataMasker:
             unmasked_text = unmasked_text.replace(mask_placeholder, original_value)
 
         return unmasked_text
+
+    def mask_multimodal_inputs(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Scan and mask sensitive information in multimodal messages (text + images)
+
+        Args:
+            messages: OpenAI/Claude format message array
+
+        Returns:
+            Modified messages with masked images
+        """
+        if not self.enabled or not self.mask_images or not self.ocr_reader:
+            return messages
+
+        modified_messages = []
+
+        for message in messages:
+            # Deep copy to avoid modifying original
+            modified_message = json.loads(json.dumps(message))
+
+            # Check if content is multimodal (array format)
+            content = modified_message.get('content')
+            if not isinstance(content, list):
+                modified_messages.append(modified_message)
+                continue
+
+            # Process each content block
+            for i, block in enumerate(content):
+                if not isinstance(block, dict):
+                    continue
+
+                # Check for image_url blocks
+                if block.get('type') == 'image_url':
+                    image_url_data = block.get('image_url', {})
+                    url = image_url_data.get('url', '')
+
+                    # Check if it's a base64 data URL
+                    if url.startswith('data:image/'):
+                        try:
+                            masked_url = self._mask_image_base64(url)
+                            modified_message['content'][i]['image_url']['url'] = masked_url
+                            logger.info(f"[DataMasker] Masked image in message (index {i})")
+                        except Exception as e:
+                            logger.warning(f"[DataMasker] Failed to mask image: {e}")
+
+            modified_messages.append(modified_message)
+
+        return modified_messages
+
+    def _mask_image_base64(self, data_url: str) -> str:
+        """
+        Mask sensitive information in base64-encoded image
+
+        Args:
+            data_url: Data URL format (data:image/png;base64,...)
+
+        Returns:
+            Modified data URL with blackout boxes over sensitive text
+        """
+        # Step A: Decode base64 to image
+        try:
+            # Parse data URL
+            header, base64_data = data_url.split(',', 1)
+            image_format = header.split('/')[1].split(';')[0]  # png, jpeg, etc.
+
+            # Decode base64
+            image_bytes = base64.b64decode(base64_data)
+            image = Image.open(io.BytesIO(image_bytes))
+
+            # Step B: OCR scan
+            logger.debug(f"[DataMasker] Running OCR on {image.size} image...")
+            ocr_results = self.ocr_reader.readtext(image)
+
+            # Step C: Check for sensitive text
+            redactions = []  # List of bounding boxes to redact
+            for detection in ocr_results:
+                bbox, text, confidence = detection
+                # bbox format: [[x0, y0], [x1, y1], [x2, y2], [x3, y3]]
+
+                if confidence < 0.3:  # Skip low-confidence detections
+                    continue
+
+                # Check against Layer 1 (regex rules)
+                is_sensitive = False
+                for rule in self.rules:
+                    if rule.compiled_regex.search(text):
+                        logger.info(f"[DataMasker] OCR detected sensitive text (regex): '{text}'")
+                        is_sensitive = True
+                        break
+
+                # Check against Layer 3 (custom keywords)
+                if not is_sensitive:
+                    for keyword in self.custom_keywords:
+                        if keyword.lower() in text.lower():
+                            logger.info(f"[DataMasker] OCR detected sensitive text (keyword): '{text}'")
+                            is_sensitive = True
+                            break
+
+                if is_sensitive:
+                    redactions.append(bbox)
+
+            # Step D: Draw blackout boxes
+            if redactions:
+                logger.info(f"[DataMasker] Applying {len(redactions)} blackout boxes")
+                draw = ImageDraw.Draw(image)
+
+                for bbox in redactions:
+                    # Convert bbox to rectangle coordinates
+                    # bbox: [[x0,y0], [x1,y1], [x2,y2], [x3,y3]]
+                    xs = [point[0] for point in bbox]
+                    ys = [point[1] for point in bbox]
+                    x_min, x_max = min(xs), max(xs)
+                    y_min, y_max = min(ys), max(ys)
+
+                    # Add padding
+                    padding = 5
+                    x_min = max(0, x_min - padding)
+                    y_min = max(0, y_min - padding)
+                    x_max = min(image.width, x_max + padding)
+                    y_max = min(image.height, y_max + padding)
+
+                    # Draw black rectangle
+                    draw.rectangle(
+                        [(x_min, y_min), (x_max, y_max)],
+                        fill='black',
+                        outline='black'
+                    )
+
+            # Step E: Re-encode to base64
+            output_buffer = io.BytesIO()
+            save_format = 'PNG' if image_format.lower() == 'png' else 'JPEG'
+            image.save(output_buffer, format=save_format)
+            output_buffer.seek(0)
+
+            new_base64 = base64.b64encode(output_buffer.read()).decode('utf-8')
+            new_data_url = f"data:image/{image_format};base64,{new_base64}"
+
+            return new_data_url
+
+        except Exception as e:
+            logger.error(f"[DataMasker] Image masking error: {e}")
+            # Return original on error
+            return data_url
 
 
 # ======================== Streaming Unmasker ========================

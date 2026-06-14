@@ -878,16 +878,32 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         # NEW: Use Data Masking Module for bidirectional PII protection
         messages_dict = [msg.model_dump() for msg in body.messages]
 
-        # Mask each message content (reuse same store for all messages)
+        # Step 1: Multimodal image masking (OCR + pixel-level blackout)
+        if data_masker.mask_images:
+            messages_dict = data_masker.mask_multimodal_inputs(messages_dict)
+
+        # Step 2: Text masking (three-layer pipeline)
         for msg in messages_dict:
             if 'content' in msg:
-                original_content = msg['content']
-                # Pass existing store to accumulate all mappings
-                masked_content, data_masking_store = data_masker.mask_prompt(
-                    original_content,
-                    data_masking_store
-                )
-                msg['content'] = masked_content
+                # Handle both string and array content
+                if isinstance(msg['content'], str):
+                    original_content = msg['content']
+                    # Pass existing store to accumulate all mappings
+                    masked_content, data_masking_store = data_masker.mask_prompt(
+                        original_content,
+                        data_masking_store
+                    )
+                    msg['content'] = masked_content
+                elif isinstance(msg['content'], list):
+                    # Multimodal content - mask text blocks only
+                    for block in msg['content']:
+                        if isinstance(block, dict) and block.get('type') == 'text':
+                            original_text = block.get('text', '')
+                            masked_text, data_masking_store = data_masker.mask_prompt(
+                                original_text,
+                                data_masking_store
+                            )
+                            block['text'] = masked_text
 
         # Prepare payload with masked messages
         payload = body.model_dump()

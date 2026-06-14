@@ -361,6 +361,9 @@ privacy_guard:
   data_masking:
     enabled: true
 
+    # Multimodal image masking (OCR + pixel-level redaction)
+    mask_images: true  # Enable OCR scanning and blackout box masking for images
+
     # Custom keywords (Layer 3 - absolute confidential terms)
     custom_keywords:
       - "Project-X"

@@ -1349,6 +1349,152 @@ def test_slm_masking_success(client):
     print("✅ SLM success (three-layer masking) test passed")
 
 
+# ======================== Image Masking Tests ========================
+
+@respx.mock
+def test_image_data_masking(client):
+    """
+    Test multimodal image masking with OCR-based sensitive text detection
+
+    Scenario:
+    - Generate test image with sensitive text: "test@oaaif.org and Project-X"
+    - Send multimodal request with base64-encoded image
+    - Verify gateway masks the image (base64 changes)
+    - Verify upstream receives modified image
+
+    Expected:
+    - Image base64 is different from original
+    - Sensitive text is redacted with black boxes
+    """
+    # Check if PIL is available
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import base64
+        import io
+    except ImportError:
+        pytest.skip("Pillow not available for image masking test")
+
+    # Check if data_masker has image masking enabled
+    import gateway
+    if not gateway.data_masker or not gateway.data_masker.mask_images:
+        pytest.skip("Image masking not enabled or OCR reader not initialized")
+
+    # Step 1: Generate test image with sensitive text
+    img_width, img_height = 400, 200
+    image = Image.new('RGB', (img_width, img_height), color='white')
+    draw = ImageDraw.Draw(image)
+
+    # Try to use a font, fallback to default if not available
+    try:
+        font = ImageFont.truetype("arial.ttf", 24)
+    except:
+        font = ImageFont.load_default()
+
+    # Draw sensitive text on image
+    sensitive_text = "Email: test@oaaif.org\nProject: Project-X"
+    draw.text((20, 50), sensitive_text, fill='black', font=font)
+
+    # Convert to base64
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    buffer.seek(0)
+    original_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+    original_data_url = f"data:image/png;base64,{original_base64}"
+
+    # Step 2: Mock OpenAI endpoint
+    openai_url = "https://api.openai.com/v1/chat/completions"
+    captured_request = []
+
+    def capture_and_respond(request):
+        captured_request.append(request)
+        mock_response = {
+            "id": "chatcmpl-image-test",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "gpt-4o",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "I see the image with redacted content."
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
+        }
+        return httpx.Response(200, json=mock_response)
+
+    respx.post(openai_url).mock(side_effect=capture_and_respond)
+
+    # Step 3: Send multimodal request with image
+    request_payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "What do you see in this image?"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": original_data_url
+                        }
+                    }
+                ]
+            }
+        ],
+        "stream": False
+    }
+
+    response = client.post(
+        "/v1/chat/completions",
+        json=request_payload,
+        headers={"Authorization": "Bearer test-key"}
+    )
+
+    # Step 4: Verify response
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+    # Step 5: Verify upstream request received modified image
+    assert len(captured_request) > 0, "No request captured"
+    upstream_request = captured_request[0]
+    upstream_payload = json.loads(upstream_request.content.decode())
+
+    # Extract image from upstream request
+    upstream_messages = upstream_payload.get("messages", [])
+    assert len(upstream_messages) > 0, "No messages in upstream request"
+
+    upstream_content = upstream_messages[0].get("content", [])
+    image_block = None
+    for block in upstream_content:
+        if isinstance(block, dict) and block.get("type") == "image_url":
+            image_block = block
+            break
+
+    assert image_block is not None, "No image_url block found in upstream request"
+
+    upstream_image_url = image_block.get("image_url", {}).get("url", "")
+    assert upstream_image_url.startswith("data:image/"), "Invalid image URL format"
+
+    # Extract base64 from upstream image
+    _, upstream_base64 = upstream_image_url.split(',', 1)
+
+    # Verify image was modified (base64 changed)
+    assert upstream_base64 != original_base64, \
+        "Image base64 should be different after masking (OCR detected sensitive text)"
+
+    # Optional: Decode and verify blackout boxes were applied
+    # (In real scenario, you could OCR the masked image to verify text is gone)
+    print(f"\n[DEBUG] Original image size: {len(original_base64)} bytes")
+    print(f"[DEBUG] Masked image size: {len(upstream_base64)} bytes")
+    print(f"[DEBUG] Image was modified: {upstream_base64 != original_base64}")
+
+    print("✅ Image data masking test passed")
+
+
 # ======================== Test Summary ========================
 
 def test_summary():
