@@ -55,14 +55,34 @@ Configure providers, routing rules, and save - all through the web UI!
 Modern web interface built with Vue 3 + Tailwind CSS (zero build process):
 
 **Features:**
-- Visual provider management (add/edit/delete)
-- Drag-drop routing rule ordering
-- Keyword-based routing configuration
-- Real-time validation and feedback
-- Automatic config backup on save
-- Hot reload without restart
+- ✅ **Live Edit & Save**: Click "Edit" on any provider or route to modify configuration directly
+- ✅ **Visual Provider Management**: Add/edit/delete providers with form validation
+- ✅ **Route Editor**: Edit match patterns, target providers, models, and keywords
+- ✅ **Real-time Persistence**: Changes save immediately to `config.yaml` with auto-backup
+- ✅ **Hot Reload**: Configuration updates without restart
+- ✅ **Input Validation**: Invalid configs rejected with clear error messages
 
 **Access:** http://localhost:8000/dashboard
+
+### Editing Configuration via UI
+
+**Edit Provider:**
+1. Navigate to Providers page
+2. Click "Edit" button on any provider card
+3. Modify Base URL or API Key (`env:VAR_NAME` format supported)
+4. Click "Save Changes" - backup created automatically at `config.yaml.backup`
+
+**Edit Route:**
+1. Navigate to Route Rules page
+2. Click "Edit" button on any route card
+3. Modify:
+   - **Match Model**: Use `*` wildcards (e.g., `gpt-4*`)
+   - **Target Provider**: Select from dropdown
+   - **Target Model**: Use `preserve` or specific model name
+   - **Keywords**: Comma-separated list (e.g., `translate, summary`)
+4. Click "Save Changes" - hot reload applies instantly
+
+All changes are validated server-side and reject invalid configurations with 400 status.
 
 ## ⚙️ Configuration
 
@@ -153,10 +173,17 @@ llm = ChatOpenAI(
 Run comprehensive test suite:
 
 ```bash
-# Run all tests
+# Gateway routing tests
 python -m pytest tests/test_gateway.py -v
 
-# Expected: 6 passed, 1 skipped
+# UI edit/save functionality tests
+python tests/test_edit_save.py
+
+# Privacy Guard tests
+python -m pytest tests/test_privacy_guard.py -v
+
+# UI integration tests
+python tests/test_ui_integration.py
 ```
 
 **Test Coverage:**
@@ -165,6 +192,10 @@ python -m pytest tests/test_gateway.py -v
 - ✅ Model downgrading
 - ✅ Default passthrough
 - ✅ Error handling
+- ✅ Provider edit and save
+- ✅ Route edit and save (with keywords)
+- ✅ Config validation and rejection
+- ✅ Backup file creation
 - ⏭️ Streaming (production-validated)
 
 **All tests use mocked HTTP requests - zero API token consumption!**
@@ -182,9 +213,21 @@ POST /v1/chat/completions
 ```
 GET  /dashboard              # Web dashboard UI
 GET  /api/config             # Get configuration as JSON
-POST /api/config             # Update configuration
+POST /api/config             # Update configuration (used by Edit/Save)
 POST /api/reload             # Hot reload configuration
+GET  /api/logs               # Get audit logs (with level filtering)
 GET  /health                 # Health check
+```
+
+**Edit/Save via API:**
+```bash
+# Get current config
+curl http://localhost:8000/api/config
+
+# Save modified config (creates backup automatically)
+curl -X POST http://localhost:8000/api/config \
+  -H "Content-Type: application/json" \
+  -d @config.json
 ```
 
 ## 📊 Routing Logic
@@ -315,10 +358,19 @@ privacy_guard:
 
 ## 🛠️ Development
 
-### Adding a Provider
+### Editing Providers and Routes
 
-1. Via Dashboard: Click "Add Provider" → Fill in details → Save
-2. Via config file (`config/config.yaml`):
+**Via Web Dashboard (Recommended):**
+1. Open http://localhost:8000/dashboard
+2. Click "Edit" button on any provider or route card
+3. Modify configuration in the popup modal
+4. Click "Save Changes" - backup created at `config.yaml.backup`
+
+**Via Config File:**
+1. Edit `config/config.yaml` directly
+2. POST to `/api/reload` or restart gateway
+
+**Adding New Provider:**
 ```yaml
 providers:
   new_provider:
@@ -326,10 +378,15 @@ providers:
     api_key: "env:NEW_PROVIDER_KEY"
 ```
 
-### Adding a Route
+**Adding New Route:**
+```yaml
+routes:
+  - match_model: "claude-*"
+    target_provider: "new_provider"
+    target_model: "preserve"
+```
 
-1. Via Dashboard: Click "Add Route" → Configure → Save
-2. Via config file: Add route to `routes` array in `config/config.yaml` (order matters!)
+Route order matters - first match wins!
 
 ### Running Tests
 
