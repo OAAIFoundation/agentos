@@ -30,6 +30,9 @@ from data_masking import DataMasker, MaskingStore, StreamUnmasker, create_data_m
 # Import Session Manager
 from session_manager import SessionStorage, initialize_session_storage, get_session_storage, session_cleanup_task
 
+# Import Audit Logger
+from audit_logger import AuditLogger, get_audit_logger, init_audit_logger
+
 # ======================== Configuration ========================
 
 CONFIG_FILE = "config/config.yaml"
@@ -47,6 +50,9 @@ session_storage: Optional[SessionStorage] = None
 
 # Background cleanup task handle
 cleanup_task_handle: Optional[asyncio.Task] = None
+
+# Audit Logger instance (Real-time operation logging)
+audit_logger: Optional[AuditLogger] = None
 
 # ======================== Pydantic Models ========================
 
@@ -611,10 +617,13 @@ async def startup_event():
     """
     Load configuration on startup and setup file watcher
     """
-    global config_data, privacy_guard, data_masker, session_storage, cleanup_task_handle
+    global config_data, privacy_guard, data_masker, session_storage, cleanup_task_handle, audit_logger
 
     try:
         config_data = load_config()
+
+        # Initialize Audit Logger
+        audit_logger = init_audit_logger(max_logs=1000)
 
         # Initialize Privacy Guard
         privacy_guard = create_privacy_guard(config_data)
@@ -638,6 +647,7 @@ async def startup_event():
         print(f"   Privacy Guard: {'Enabled' if privacy_guard.enabled else 'Disabled'}")
         print(f"   Data Masking: {'Enabled' if data_masker and data_masker.enabled else 'Disabled'}")
         print(f"   Session Management: {'Enabled' if session_storage and session_storage.enabled else 'Disabled'}")
+        print(f"   Audit Logger: Enabled")
         print("="*80 + "\n")
 
         # Setup file watcher for hot reload
@@ -646,6 +656,9 @@ async def startup_event():
         observer.schedule(event_handler, path='.', recursive=False)
         observer.start()
         print("[WATCH]  Config file watcher started (hot reload enabled)\n")
+
+        # Log startup
+        audit_logger.info("system", "AgentOS started successfully")
 
     except Exception as e:
         print(f"[ERROR] Failed to load configuration: {str(e)}")
@@ -785,6 +798,25 @@ async def api_reload_config():
         "routes": len(config_data.get('routes', []))
     }
 
+@app.get("/api/logs")
+async def get_logs(
+    level: str = "all",
+    limit: int = 100,
+    category: str = None
+):
+    """
+    Get audit logs with filtering
+
+    Query Parameters:
+        level: Filter by level (all, info, warning, error, warning+)
+        limit: Maximum number of logs to return (default: 100)
+        category: Filter by category (routing, masking, policy, audit, system)
+    """
+    if audit_logger:
+        logs = audit_logger.get_logs(level=level, limit=limit, category=category)
+        return JSONResponse(content={"logs": logs})
+    return JSONResponse(content={"logs": []})
+
 # ======================== LLM Proxy Routes ========================
 
 @app.post("/v1/chat/completions")
@@ -814,6 +846,12 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
 
         if policy_result:
             if policy_result["action"] == "block":
+                # Log policy block
+                if audit_logger:
+                    audit_logger.error("policy", f"Request blocked by policy: {policy_result.get('policy_name', 'Unknown')}", {
+                        "message": policy_result["message"],
+                        "model": body.model
+                    })
                 raise HTTPException(
                     status_code=403,
                     detail=policy_result["message"]
@@ -821,12 +859,28 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             elif policy_result["action"] == "reroute":
                 # Override routing decision
                 print(f"[POLICY] Reroute: {policy_result['target_provider']} / {policy_result['target_model']}")
+                # Log policy reroute
+                if audit_logger:
+                    audit_logger.warning("routing", f"Policy reroute: {body.model} → {policy_result['target_provider']}/{policy_result['target_model']}", {
+                        "policy_name": policy_result.get('policy_name', 'Unknown'),
+                        "original_model": body.model,
+                        "target_provider": policy_result['target_provider'],
+                        "target_model": policy_result['target_model']
+                    })
 
     # ==================== LEGACY: Regex Audit (Preserved) ====================
     # Block or log requests with sensitive patterns
     if privacy_guard and privacy_guard.enabled:
         messages_dict = [msg.model_dump() for msg in body.messages]
-        privacy_guard.audit_request(messages_dict)  # Raises HTTPException if blocked
+        try:
+            privacy_guard.audit_request(messages_dict)  # Raises HTTPException if blocked
+        except HTTPException as e:
+            # Log regex audit block
+            if audit_logger:
+                audit_logger.error("audit", f"Request blocked by regex audit: {e.detail}", {
+                    "model": body.model
+                })
+            raise
 
     # 1. Find matching route (or use policy override)
     if policy_result and policy_result.get("action") == "reroute":
@@ -897,6 +951,22 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         has_keywords
     )
 
+    # Audit log routing decision
+    if audit_logger:
+        if body.model != target_model:
+            # Model was rerouted
+            audit_logger.warning("routing", f"Model rerouted: {body.model} → {target_provider_name}/{target_model}", {
+                "original_model": body.model,
+                "target_provider": target_provider_name,
+                "target_model": target_model
+            })
+        else:
+            # Normal routing
+            audit_logger.info("routing", f"Request routed: {body.model} → {target_provider_name}", {
+                "model": body.model,
+                "provider": target_provider_name
+            })
+
     # ==================== DATA MASKING LAYER: Bidirectional PII Masking ====================
     # NEW: Data Masking Module (takes priority over legacy Privacy Guard masking)
 
@@ -919,6 +989,9 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         # NEW: Use Data Masking Module for bidirectional PII protection
         messages_dict = [msg.model_dump() for msg in body.messages]
 
+        # Track masking statistics
+        entities_masked = 0
+
         # Step 1: Multimodal image masking (OCR + pixel-level blackout)
         if data_masker.mask_images:
             messages_dict = data_masker.mask_multimodal_inputs(messages_dict)
@@ -935,6 +1008,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
                         data_masking_store
                     )
                     msg['content'] = masked_content
+                    # Count masked entities
+                    entities_masked += len(data_masking_store.real_to_fake) + len(data_masking_store.mask_to_original)
                 elif isinstance(msg['content'], list):
                     # Multimodal content - mask text blocks only
                     for block in msg['content']:
@@ -945,6 +1020,14 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
                                 data_masking_store
                             )
                             block['text'] = masked_text
+                            entities_masked += len(data_masking_store.real_to_fake) + len(data_masking_store.mask_to_original)
+
+        # Audit log data masking
+        if audit_logger and entities_masked > 0:
+            audit_logger.warning("masking", f"Masked {entities_masked} sensitive entities", {
+                "entity_count": entities_masked,
+                "session_id": actual_session_id if session_storage and session_storage.enabled else None
+            })
 
         # Prepare payload with masked messages
         payload = body.model_dump()
