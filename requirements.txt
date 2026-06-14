@@ -11,3 +11,5 @@ respx==0.20.2
 rule-engine==4.5.0
 easyocr==1.7.0
 pillow==10.2.0
+faker==24.0.0
+pyahocorasick==2.1.0

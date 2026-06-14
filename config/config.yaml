@@ -361,6 +361,9 @@ privacy_guard:
   data_masking:
     enabled: true
 
+    # Pseudonymization mode: Use Faker to generate realistic fake names instead of [MASK] placeholders
+    use_pseudonyms: true  # Replace "王伟" with "张强" instead of "[MASK_NAME_0]"
+
     # Multimodal image masking (OCR + pixel-level redaction)
     mask_images: true  # Enable OCR scanning and blackout box masking for images
 
