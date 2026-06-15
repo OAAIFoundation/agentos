@@ -26,6 +26,7 @@ Now all LLM requests will be automatically intercepted without any app configura
 import asyncio
 import socket
 import ssl
+import os
 import logging
 from typing import Optional, Tuple
 from pathlib import Path
