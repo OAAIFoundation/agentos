@@ -7,8 +7,14 @@ Modify DEFAULT_PORT below to change the default port
 
 import os
 import sys
+import io
 import uvicorn
 from config_loader import load_config
+
+# Fix Windows console encoding
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # ===== Configuration =====
 DEFAULT_PORT = 8001

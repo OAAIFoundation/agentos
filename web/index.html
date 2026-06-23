@@ -11,6 +11,9 @@
     <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
     <style>
         [v-cloak] { display: none; }
 
@@ -422,8 +425,224 @@
                             </div>
                         </div>
 
+                        <!-- Usage Overview Chart -->
+                        <div class="card" style="margin-top: 30px;">
+                            <!-- Header Row: Title and Time Buttons -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                                <div>
+                                    <h3 style="font-size: 22px; font-weight: 600; margin-bottom: 4px;">Usage Overview</h3>
+                                    <p style="font-size: 14px; color: #5f6368;">Track request volume across all providers.</p>
+                                </div>
+
+                                <!-- Right Side: Time Buttons + Date Picker -->
+                                <div style="display: flex; flex-direction: column; gap: 12px; align-items: flex-end;">
+                                    <!-- Time Range Buttons -->
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <button
+                                            v-for="range in timeRanges"
+                                            :key="range.value"
+                                            @click="selectedTimeRange = range.value; showCustomDatePicker = false; updateChartData()"
+                                            :style="{
+                                                padding: '6px 14px',
+                                                border: selectedTimeRange === range.value ? '1px solid #1a73e8' : '1px solid #dadce0',
+                                                background: selectedTimeRange === range.value ? '#e8f0fe' : 'white',
+                                                color: selectedTimeRange === range.value ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: selectedTimeRange === range.value ? '500' : '400',
+                                                transition: 'all 0.2s'
+                                            }"
+                                        >
+                                            {{ range.label }}
+                                        </button>
+                                        <button
+                                            @click="toggleCustomDatePicker"
+                                            :style="{
+                                                padding: '6px 14px',
+                                                border: selectedTimeRange === 'custom' ? '1px solid #1a73e8' : '1px solid #dadce0',
+                                                background: selectedTimeRange === 'custom' ? '#e8f0fe' : 'white',
+                                                color: selectedTimeRange === 'custom' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: selectedTimeRange === 'custom' ? '500' : '400',
+                                                transition: 'all 0.2s'
+                                            }"
+                                        >
+                                            Custom
+                                        </button>
+                                    </div>
+
+                                    <!-- Custom Date Picker (Second Row) -->
+                                    <div v-if="showCustomDatePicker" style="display: flex; gap: 8px; align-items: center;">
+                                        <input
+                                            type="date"
+                                            v-model="customStartDate"
+                                            style="padding: 6px 10px; border: 1px solid #dadce0; border-radius: 6px; font-size: 13px; font-family: inherit;"
+                                        />
+                                        <span style="color: #5f6368; font-size: 13px;">to</span>
+                                        <input
+                                            type="date"
+                                            v-model="customEndDate"
+                                            style="padding: 6px 10px; border: 1px solid #dadce0; border-radius: 6px; font-size: 13px; font-family: inherit;"
+                                        />
+                                        <button
+                                            @click="applyCustomDateRange"
+                                            style="padding: 6px 14px; background: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.2s;"
+                                            @mouseenter="$event.target.style.background = '#1765cc'"
+                                            @mouseleave="$event.target.style.background = '#1a73e8'"
+                                        >
+                                            Apply
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Chart Controls -->
+                            <div style="display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+                                <!-- Granularity Button Group -->
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <label style="font-size: 14px; color: #5f6368; font-weight: 400;">Granularity</label>
+                                    <div style="display: inline-flex; background: #f1f3f4; border-radius: 20px; padding: 4px;">
+                                        <button
+                                            @click="chartGranularity = 'daily'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartGranularity === 'daily' ? 'white' : 'transparent',
+                                                color: chartGranularity === 'daily' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartGranularity === 'daily' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartGranularity === 'daily' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Daily
+                                        </button>
+                                        <button
+                                            @click="chartGranularity = 'hourly'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartGranularity === 'hourly' ? 'white' : 'transparent',
+                                                color: chartGranularity === 'hourly' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartGranularity === 'hourly' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartGranularity === 'hourly' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Hourly
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Break down by Button Group -->
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <label style="font-size: 14px; color: #5f6368; font-weight: 400;">Break down by</label>
+                                    <div style="display: inline-flex; background: #f1f3f4; border-radius: 20px; padding: 4px;">
+                                        <button
+                                            @click="chartBreakdown = 'day'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartBreakdown === 'day' ? 'white' : 'transparent',
+                                                color: chartBreakdown === 'day' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartBreakdown === 'day' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartBreakdown === 'day' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Day
+                                        </button>
+                                        <button
+                                            @click="chartBreakdown = 'model'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartBreakdown === 'model' ? 'white' : 'transparent',
+                                                color: chartBreakdown === 'model' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartBreakdown === 'model' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartBreakdown === 'model' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Model
+                                        </button>
+                                        <button
+                                            @click="chartBreakdown = 'provider'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartBreakdown === 'provider' ? 'white' : 'transparent',
+                                                color: chartBreakdown === 'provider' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartBreakdown === 'provider' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartBreakdown === 'provider' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Provider
+                                        </button>
+                                        <button
+                                            @click="chartBreakdown = 'department'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartBreakdown === 'department' ? 'white' : 'transparent',
+                                                color: chartBreakdown === 'department' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartBreakdown === 'department' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartBreakdown === 'department' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Department
+                                        </button>
+                                        <button
+                                            @click="chartBreakdown = 'users'; updateChartData()"
+                                            :style="{
+                                                padding: '6px 16px',
+                                                border: 'none',
+                                                background: chartBreakdown === 'users' ? 'white' : 'transparent',
+                                                color: chartBreakdown === 'users' ? '#1a73e8' : '#5f6368',
+                                                borderRadius: '16px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: chartBreakdown === 'users' ? '500' : '400',
+                                                transition: 'all 0.2s',
+                                                boxShadow: chartBreakdown === 'users' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                            }"
+                                        >
+                                            Top Users
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Chart Canvas -->
+                            <div style="position: relative; height: 400px; width: 100%;">
+                                <canvas ref="usageChart" style="max-height: 400px;"></canvas>
+                            </div>
+                        </div>
+
                         <!-- Quick Info -->
-                        <div class="card">
+                        <div class="card" style="margin-top: 20px;">
                             <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">Quick Info</h3>
                             <div style="color: #5f6368; line-height: 2;">
                                 <p>🚀 Router is running on <code style="background: #f1f3f4; padding: 4px 8px; border-radius: 4px; font-family: monospace;">http://localhost:8001</code></p>
@@ -1012,6 +1231,20 @@ response = client.chat.completions.create(
                         routes: 0,
                         total_requests: 0
                     },
+                    // Chart data
+                    usageChart: null,
+                    selectedTimeRange: '7d',
+                    timeRanges: [
+                        { label: '24h', value: '24h' },
+                        { label: '7d', value: '7d' },
+                        { label: '30d', value: '30d' },
+                        { label: 'All', value: 'all' }
+                    ],
+                    showCustomDatePicker: false,
+                    customStartDate: '',
+                    customEndDate: '',
+                    chartGranularity: 'daily',
+                    chartBreakdown: 'day',
                     navSections: [
                         {
                             id: 'overview',
@@ -1116,6 +1349,10 @@ response = client.chat.completions.create(
                 this.loadConfig();
                 this.loadStats();
                 this.startLogRefresh();
+                // Initialize chart after DOM is ready
+                this.$nextTick(() => {
+                    this.initChart();
+                });
             },
             beforeUnmount() {
                 this.stopLogRefresh();
@@ -1124,6 +1361,15 @@ response = client.chat.completions.create(
                 activePage(newPage) {
                     if (newPage === 'test') {
                         this.startLogRefresh();
+                    } else if (newPage === 'overview') {
+                        // Refresh chart when switching to overview
+                        this.$nextTick(() => {
+                            if (!this.usageChart) {
+                                this.initChart();
+                            } else {
+                                this.updateChartData();
+                            }
+                        });
                     }
                 },
                 logLevel() {
@@ -1459,6 +1705,209 @@ response = client.chat.completions.create(
                         this.config.privacy_guard.data_masking.session_management.enabled =
                             !this.config.privacy_guard.data_masking.session_management.enabled;
                     }
+                },
+
+                // Chart methods
+                initChart() {
+                    const canvas = this.$refs.usageChart;
+                    if (!canvas) return;
+
+                    const ctx = canvas.getContext('2d');
+                    this.usageChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: [],
+                            datasets: []
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    stacked: true,
+                                    grid: {
+                                        display: false
+                                    }
+                                },
+                                y: {
+                                    stacked: true,
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Requests'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                },
+                                tooltip: {
+                                    mode: 'index',
+                                    intersect: false
+                                }
+                            }
+                        }
+                    });
+
+                    this.updateChartData();
+                },
+
+                async updateChartData() {
+                    if (!this.usageChart) return;
+
+                    // Calculate date range
+                    const now = new Date();
+                    let startDate, endDate;
+
+                    if (this.selectedTimeRange === 'custom') {
+                        startDate = new Date(this.customStartDate);
+                        endDate = new Date(this.customEndDate);
+                    } else {
+                        endDate = now;
+                        switch (this.selectedTimeRange) {
+                            case '24h':
+                                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                                break;
+                            case '7d':
+                                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                                break;
+                            case '30d':
+                                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                                break;
+                            case 'all':
+                                startDate = new Date(0); // Beginning of time
+                                break;
+                        }
+                    }
+
+                    // Fetch logs to aggregate data
+                    try {
+                        const response = await fetch('/api/logs?level=info&limit=1000');
+                        const data = await response.json();
+                        const logs = data.logs || [];
+
+                        // Filter routing logs within date range
+                        const routingLogs = logs.filter(log => {
+                            if (log.category !== 'routing' || log.level !== 'info') return false;
+                            const logDate = new Date(log.timestamp);
+                            return logDate >= startDate && logDate <= endDate;
+                        });
+
+                        // Aggregate by time period and breakdown
+                        const aggregated = this.aggregateLogData(routingLogs, startDate, endDate);
+
+                        // Update chart
+                        this.usageChart.data.labels = aggregated.labels;
+                        this.usageChart.data.datasets = aggregated.datasets;
+                        this.usageChart.update();
+                    } catch (error) {
+                        console.error('Failed to update chart:', error);
+                    }
+                },
+
+                aggregateLogData(logs, startDate, endDate) {
+                    const labels = [];
+                    const dataMap = {};
+
+                    // Generate time buckets
+                    if (this.chartGranularity === 'hourly') {
+                        const hours = Math.ceil((endDate - startDate) / (60 * 60 * 1000));
+                        for (let i = 0; i <= Math.min(hours, 168); i++) {  // Max 7 days of hourly data
+                            const date = new Date(startDate.getTime() + i * 60 * 60 * 1000);
+                            const label = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:00`;
+                            labels.push(label);
+                        }
+                    } else {  // daily
+                        const days = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000));
+                        for (let i = 0; i <= days; i++) {
+                            const date = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+                            const label = `${date.getMonth() + 1}/${date.getDate()}`;
+                            labels.push(label);
+                        }
+                    }
+
+                    // Aggregate logs into buckets
+                    logs.forEach(log => {
+                        const logDate = new Date(log.timestamp);
+                        let bucketIndex;
+
+                        if (this.chartGranularity === 'hourly') {
+                            const hoursDiff = Math.floor((logDate - startDate) / (60 * 60 * 1000));
+                            bucketIndex = hoursDiff;
+                        } else {
+                            const daysDiff = Math.floor((logDate - startDate) / (24 * 60 * 60 * 1000));
+                            bucketIndex = daysDiff;
+                        }
+
+                        if (bucketIndex >= 0 && bucketIndex < labels.length) {
+                            let breakdownKey;
+                            if (this.chartBreakdown === 'provider') {
+                                breakdownKey = log.details?.target_provider || 'unknown';
+                            } else if (this.chartBreakdown === 'model') {
+                                breakdownKey = log.details?.target_model || 'unknown';
+                            } else if (this.chartBreakdown === 'day') {
+                                // Group all into single 'Total' category
+                                breakdownKey = 'Total';
+                            } else if (this.chartBreakdown === 'department') {
+                                // TODO: Extract department from user metadata when available
+                                breakdownKey = log.details?.department || 'Default Department';
+                            } else if (this.chartBreakdown === 'users') {
+                                // TODO: Extract user from authentication when available
+                                breakdownKey = log.details?.user || 'Anonymous';
+                            } else {
+                                breakdownKey = 'Total';
+                            }
+
+                            if (!dataMap[breakdownKey]) {
+                                dataMap[breakdownKey] = new Array(labels.length).fill(0);
+                            }
+                            dataMap[breakdownKey][bucketIndex]++;
+                        }
+                    });
+
+                    // Convert to Chart.js dataset format
+                    const colors = [
+                        '#667eea', '#f5576c', '#4facfe', '#f093fb', '#764ba2',
+                        '#43e97b', '#fa709a', '#30cfd0', '#a8edea', '#fed6e3',
+                        '#ffecd2', '#fcb69f', '#ff9a9e', '#fad0c4', '#fbc2eb'
+                    ];
+
+                    const datasets = Object.keys(dataMap).map((key, index) => ({
+                        label: key,
+                        data: dataMap[key],
+                        backgroundColor: colors[index % colors.length],
+                        borderWidth: 0
+                    }));
+
+                    return { labels, datasets };
+                },
+
+                toggleCustomDatePicker() {
+                    this.showCustomDatePicker = !this.showCustomDatePicker;
+
+                    // Initialize with last 7 days if opening for the first time or dates are empty
+                    if (this.showCustomDatePicker && (!this.customStartDate || !this.customEndDate)) {
+                        const now = new Date();
+                        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+                        // Format dates as YYYY-MM-DD
+                        this.customEndDate = now.toISOString().split('T')[0];
+                        this.customStartDate = sevenDaysAgo.toISOString().split('T')[0];
+                    }
+                },
+
+                applyCustomDateRange() {
+                    if (!this.customStartDate || !this.customEndDate) {
+                        alert('Please select both start and end dates');
+                        return;
+                    }
+                    this.selectedTimeRange = 'custom';
+                    this.updateChartData();
                 }
             }
         }).mount('#app');

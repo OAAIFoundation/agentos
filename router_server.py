@@ -27,6 +27,7 @@ from pathlib import Path
 from config_loader import load_config, RouterConfig
 from route_matcher import RouteMatcher
 from llm_client import LLMClient
+from db_logger import DatabaseLogger
 
 # Optional: Import privacy guard if available
 try:
@@ -47,10 +48,11 @@ router_config: Optional[RouterConfig] = None
 route_matcher: Optional[RouteMatcher] = None
 llm_client: Optional[LLMClient] = None
 privacy_guard: Optional[Any] = None
+db_logger: Optional[DatabaseLogger] = None
 
-# Request logs storage (in-memory for now)
+# Request logs storage (in-memory cache for fast access)
 request_logs: List[Dict[str, Any]] = []
-MAX_LOGS = 1000  # Keep last 1000 requests
+MAX_LOGS = 100  # Reduced to 100 for memory cache (full history in database)
 
 
 # ======================== Pydantic Models ========================
@@ -77,7 +79,7 @@ async def lifespan(app: FastAPI):
     FastAPI lifespan context manager
     Similar to semantic-router's initialization flow
     """
-    global router_config, route_matcher, llm_client, privacy_guard
+    global router_config, route_matcher, llm_client, privacy_guard, db_logger
 
     # Startup
     logger.info("=" * 60)
@@ -85,6 +87,12 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     try:
+        # Initialize database logger
+        logger.info("Initializing database logger")
+        db_logger = DatabaseLogger()
+        log_count = db_logger.get_log_count()
+        logger.info(f"Database contains {log_count} historical logs")
+
         # Load configuration
         logger.info(f"Loading configuration from {DEFAULT_CONFIG_PATH}")
         router_config = load_config(DEFAULT_CONFIG_PATH)
@@ -248,15 +256,28 @@ async def get_config():
 
 
 @app.get("/api/stats")
-async def get_stats():
-    """Get router statistics"""
-    # TODO: Implement request counting and stats
-    return {
-        "total_requests": 0,
+async def get_stats(start_date: str = None, end_date: str = None):
+    """
+    Get router statistics
+
+    Query parameters:
+    - start_date: Start date filter (ISO format)
+    - end_date: End date filter (ISO format)
+    """
+    stats = {
         "providers": len(router_config.providers) if router_config else 0,
         "routes": len(router_config.routes) if router_config else 0,
         "status": "running"
     }
+
+    # Get request statistics from database
+    if db_logger:
+        db_stats = db_logger.get_stats(start_date=start_date, end_date=end_date)
+        stats.update(db_stats)
+    else:
+        stats["total_requests"] = 0
+
+    return stats
 
 
 @app.post("/api/config")
@@ -268,51 +289,67 @@ async def save_config(request: Request):
 
 
 @app.get("/api/logs")
-async def get_logs(level: str = "all", limit: int = 100):
-    """Get request logs (from file + memory)"""
-    from pathlib import Path
-    import json
+async def get_logs(
+    level: str = "all",
+    limit: int = 100,
+    offset: int = 0,
+    provider: str = None,
+    start_date: str = None,
+    end_date: str = None
+):
+    """
+    Get request logs from database
 
-    all_logs = []
+    Query parameters:
+    - level: Filter by log level (all, info, error)
+    - limit: Maximum number of records (default: 100)
+    - offset: Pagination offset (default: 0)
+    - provider: Filter by provider name
+    - start_date: Start date filter (ISO format)
+    - end_date: End date filter (ISO format)
+    """
+    if not db_logger:
+        return {"logs": []}
 
-    # Read from proxy log file (if exists)
-    proxy_log_file = Path("proxy_logs.jsonl")
-    if proxy_log_file.exists():
-        try:
-            with proxy_log_file.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            all_logs.append(json.loads(line))
-                        except:
-                            pass
-        except Exception as e:
-            logger.warning(f"Failed to read proxy logs: {e}")
-
-    # Also include in-memory logs from Router
-    global request_logs
-    all_logs.extend(request_logs)
-
-    # Sort by timestamp (newest first)
-    all_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-
-    # Filter by level if needed
-    if level != "all":
-        all_logs = [log for log in all_logs if log.get("level") == level]
-
-    # Return most recent logs (up to limit)
-    return {"logs": all_logs[:limit]}
+    try:
+        logs = db_logger.get_logs(
+            level=level if level != "all" else None,
+            provider=provider,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset
+        )
+        return {"logs": logs, "count": len(logs)}
+    except Exception as e:
+        logger.error(f"Failed to get logs: {e}")
+        return {"logs": [], "error": str(e)}
 
 
 @app.post("/api/logs/clear")
-async def clear_logs():
-    """Clear in-memory logs (file logs preserved)"""
-    global request_logs
-    count = len(request_logs)
-    request_logs = []
-    logger.info(f"Cleared {count} in-memory logs")
-    return {"status": "ok", "cleared": count}
+async def clear_logs(before_date: str = None):
+    """
+    Clear logs from database
+
+    Query parameters:
+    - before_date: Optional ISO date, only delete logs before this date
+    """
+    if not db_logger:
+        return {"status": "error", "message": "Database logger not initialized"}
+
+    try:
+        # Clear database logs
+        count = db_logger.clear_logs(before_date=before_date)
+
+        # Also clear memory cache
+        global request_logs
+        request_logs = []
+
+        logger.info(f"Cleared {count} database logs")
+        return {"status": "ok", "cleared": count}
+    except Exception as e:
+        logger.error(f"Failed to clear logs: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 # ======================== Chat Completion Endpoint ========================
@@ -415,9 +452,13 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
                 "message_preview": messages[0].get("content", "")[:50] if messages else ""
             }
         }
-        request_logs.append(log_entry)
 
-        # Keep only recent logs
+        # Write to database (persistent)
+        if db_logger:
+            db_logger.add_log(log_entry)
+
+        # Also keep in memory for fast access
+        request_logs.append(log_entry)
         if len(request_logs) > MAX_LOGS:
             request_logs = request_logs[-MAX_LOGS:]
 
@@ -469,6 +510,12 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
                 "model": request.model
             }
         }
+
+        # Write to database
+        if db_logger:
+            db_logger.add_log(error_log)
+
+        # Also keep in memory
         request_logs.append(error_log)
         if len(request_logs) > MAX_LOGS:
             request_logs = request_logs[-MAX_LOGS:]
@@ -489,6 +536,12 @@ async def chat_completions(request: ChatCompletionRequest, raw_request: Request)
                 "error_type": type(e).__name__
             }
         }
+
+        # Write to database
+        if db_logger:
+            db_logger.add_log(error_log)
+
+        # Also keep in memory
         request_logs.append(error_log)
         if len(request_logs) > MAX_LOGS:
             request_logs = request_logs[-MAX_LOGS:]
