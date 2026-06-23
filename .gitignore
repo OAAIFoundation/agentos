@@ -48,3 +48,7 @@ proxy_logs.jsonl
 
 # Semantic Router reference (clone from github)
 AgentOS/
+
+# SQLite database
+data/
+*.db

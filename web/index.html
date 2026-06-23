@@ -1710,10 +1710,16 @@ response = client.chat.completions.create(
                 // Chart methods
                 initChart() {
                     const canvas = this.$refs.usageChart;
-                    if (!canvas) return;
+                    if (!canvas) {
+                        console.error('Canvas element not found');
+                        return;
+                    }
 
+                    console.log('Initializing chart...');
                     const ctx = canvas.getContext('2d');
-                    this.usageChart = new Chart(ctx, {
+
+                    // Use markRaw to prevent Vue from making Chart instance reactive
+                    const chart = new Chart(ctx, {
                         type: 'bar',
                         data: {
                             labels: [],
@@ -1754,12 +1760,18 @@ response = client.chat.completions.create(
                         }
                     });
 
+                    // Store chart instance without making it reactive
+                    this.usageChart = Vue.markRaw(chart);
                     this.updateChartData();
                 },
 
                 async updateChartData() {
-                    if (!this.usageChart) return;
+                    if (!this.usageChart) {
+                        console.warn('Chart not initialized, skipping update');
+                        return;
+                    }
 
+                    console.log('Updating chart data...');
                     // Calculate date range
                     const now = new Date();
                     let startDate, endDate;
@@ -1800,6 +1812,12 @@ response = client.chat.completions.create(
 
                         // Aggregate by time period and breakdown
                         const aggregated = this.aggregateLogData(routingLogs, startDate, endDate);
+
+                        console.log('Chart data:', {
+                            labels: aggregated.labels,
+                            datasets: aggregated.datasets.length,
+                            logs: routingLogs.length
+                        });
 
                         // Update chart
                         this.usageChart.data.labels = aggregated.labels;
