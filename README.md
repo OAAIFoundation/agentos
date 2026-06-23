@@ -1,10 +1,12 @@
 # AgentOS - LLM Routing Gateway
 
-A production-ready LLM API routing gateway with a web-based configuration dashboard. Route requests across multiple LLM providers (OpenAI, DeepSeek, Qwen, local models) with intelligent keyword-based routing, cost optimization, and hot configuration reload.
+A production-ready LLM API routing gateway with a web-based configuration dashboard. Route requests across **15+ LLM providers** (OpenAI, Anthropic, AWS Bedrock, Azure, Google Gemini, DeepSeek, Qwen, Baichuan, Zhipu, Moonshot, MiniMax, vLLM, Ollama, LM Studio) with intelligent keyword-based routing, cost optimization, and hot configuration reload.
+
+![AgentOS Dashboard](images/snapshot.png)
 
 ## 🌟 Key Features
 
-- ✅ **Multi-Provider Routing** - OpenAI, DeepSeek, Qwen, Ollama, vLLM support
+- ✅ **Multi-Provider Routing** - 15+ providers: OpenAI, Anthropic, Bedrock, Azure, Gemini, DeepSeek, Qwen, MiniMax, vLLM, Ollama, and more
 - ✅ **Web Dashboard** - Visual configuration editor with drag-drop routing rules
 - ✅ **Smart Routing** - Keyword-based and wildcard pattern matching
 - ✅ **Cost Optimization** - Auto-downgrade expensive models for simple tasks
@@ -25,17 +27,18 @@ A production-ready LLM API routing gateway with a web-based configuration dashbo
 
 ```bash
 # Windows
-start_transparent_mode.bat
+start_all.bat
 
-# Linux/Mac
-./start_transparent_mode.sh
+# Opens two terminals:
+# - Terminal 1: Router Server (port 8001)
+# - Terminal 2: Proxy Server (port 8801)
 ```
 
 This script automatically:
-- ✅ Starts gateway on port 8000
-- ✅ Starts proxy on port 8888
-- ✅ Opens dashboard in browser
-- ✅ Shows you the proxy configuration commands
+- ✅ Starts Router on port 8001
+- ✅ Starts Proxy on port 8801
+- ✅ Dashboard available at http://localhost:8001/dashboard
+- ✅ Shows proxy configuration instructions
 
 #### Option B: Manual Start
 
@@ -44,58 +47,85 @@ This script automatically:
 pip install -r requirements.txt
 
 # 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+cp config/.env.example config/.env
+# Edit config/.env with your API keys
 
-# 3. Start gateway (Terminal 1)
-python gateway.py
+# 3. Start Router (Terminal 1)
+python start_router.py
 
-# 4. Start transparent proxy (Terminal 2)
-python proxy_server.py
+# 4. Start Proxy (Terminal 2)
+python start_proxy.py
 
-# 5. Configure system proxy (any terminal)
-# Windows (CMD):
-set HTTP_PROXY=http://localhost:8888
-set HTTPS_PROXY=http://localhost:8888
+# 5. Configure Claude Code Extension (or other apps)
+# Edit VS Code settings.json:
+{
+  "claudeCode.environmentVariables": [
+    {
+      "name": "HTTP_PROXY",
+      "value": "http://localhost:8801"
+    },
+    {
+      "name": "HTTPS_PROXY",
+      "value": "http://localhost:8801"
+    }
+  ]
+}
 
-# Windows (PowerShell):
-$env:HTTP_PROXY="http://localhost:8888"
-$env:HTTPS_PROXY="http://localhost:8888"
+# Or set system-wide (Windows PowerShell):
+$env:HTTP_PROXY="http://localhost:8801"
+$env:HTTPS_PROXY="http://localhost:8801"
 
 # Linux/Mac:
-export HTTP_PROXY=http://localhost:8888
-export HTTPS_PROXY=http://localhost:8888
+export HTTP_PROXY=http://localhost:8801
+export HTTPS_PROXY=http://localhost:8801
 ```
 
-#### Option C: Try the Demo
+#### Option C: Install mitmproxy Certificate (Required for HTTPS)
+
+For HTTPS interception to work, install mitmproxy's CA certificate:
 
 ```bash
-# After starting gateway and proxy, run:
-python demo_transparent_proxy.py
+# 1. Start proxy once to generate certificate
+python start_proxy.py
+# Certificate created at: ~/.mitmproxy/mitmproxy-ca-cert.pem
 
-# This demo shows:
-# - Request without proxy (fails with fake key)
-# - Request with proxy (automatically routed)
-# - Side-by-side comparison of transparent vs explicit mode
+# 2. Install certificate (Windows)
+# Right-click mitmproxy-ca-cert.pem → Install Certificate
+# → Place in "Trusted Root Certification Authorities"
+
+# Or use PowerShell (admin):
+Import-Certificate -FilePath ~/.mitmproxy/mitmproxy-ca-cert.pem `
+  -CertStoreLocation Cert:\LocalMachine\Root
+
+# 3. Restart VS Code / IDE
+# Apps need to reload to pick up new certificates
+
+# 4. Verify installation
+certmgr.msc  # Should see "mitmproxy" in Trusted Root
 ```
 
-**That's it!** Now all LLM requests from any app will be automatically intercepted and routed through gateway!
+**That's it!** Now all LLM requests from any app will be automatically intercepted and routed through Router!
 
 ```python
 # Your app code stays the same - no base_url needed!
 from openai import OpenAI
 
+# Set proxy (once per session)
+import os
+os.environ['HTTP_PROXY'] = 'http://localhost:8801'
+os.environ['HTTPS_PROXY'] = 'http://localhost:8801'
+
 client = OpenAI(api_key="sk-xxx")  # Goes to api.openai.com
-# But proxy intercepts it and routes through gateway!
+# But proxy intercepts it → Router → applies routing rules!
 
 response = client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "Hello!"}]
 )
-# Gateway routing rules applied automatically!
+# Automatically routed based on config.yaml rules!
 ```
 
-### Mode 2: Explicit Proxy (Manual Configuration)
+### Mode 2: Direct Router Mode (No Proxy)
 
 **Requires setting base_url in your app:**
 
@@ -104,30 +134,35 @@ response = client.chat.completions.create(
 pip install -r requirements.txt
 
 # 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys
+cp config/.env.example config/.env
+# Edit config/.env with your API keys
 
-# 3. Start gateway
-python gateway.py
+# 3. Start Router only
+python start_router.py
 ```
 
-Gateway starts on `http://localhost:8000`
+Router starts on `http://localhost:8001`
 
 ```python
 # App must configure base_url explicitly
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="dummy",
-    base_url="http://localhost:8000/v1"  # ← Must set this
+    api_key="dummy",  # Not used, router handles auth
+    base_url="http://localhost:8001/v1/chat/completions"
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
 
 ### Dashboard Access
 
-Open browser: **http://localhost:8000/dashboard**
+Open browser: **http://localhost:8001/dashboard**
 
-Configure providers, routing rules, and save - all through the web UI!
+Configure providers, routing rules, view logs - all through the web UI!
 
 ## 🎨 Web Dashboard
 
@@ -141,7 +176,7 @@ Modern web interface built with Vue 3 + Tailwind CSS (zero build process):
 - ✅ **Hot Reload**: Configuration updates without restart
 - ✅ **Input Validation**: Invalid configs rejected with clear error messages
 
-**Access:** http://localhost:8000/dashboard
+**Access:** http://localhost:8001/dashboard
 
 ### Editing Configuration via UI
 
@@ -203,36 +238,39 @@ routes:
     target_model: "preserve"  # Keep original model name
 ```
 
-**Edit via Dashboard:** http://localhost:8000/dashboard
+**Edit via Dashboard:** http://localhost:8001/dashboard
 
 ## 🌐 Provider Support
 
-AgentOS supports **18 LLM providers** with intelligent routing and API format adaptation.
+AgentOS supports **15+ LLM providers** with intelligent routing and API format adaptation.
 
 ### Provider Support Matrix
 
-| Provider | Status | API Format | Auth Method | Notes |
-|----------|--------|------------|-------------|-------|
-| **OpenAI** | ✅ Full | OpenAI | Bearer Token | Native support |
-| **Anthropic** | ✅ Full | Custom | x-api-key header | Auto-adapted |
-| **Google Gemini** | ⚠️ Partial | Custom | URL param | Auto-adapted |
-| **DeepSeek** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Qwen (Alibaba)** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Zhipu (GLM)** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Moonshot** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Baidu** | ⚠️ Partial | Custom | Access Token | Requires OAuth |
-| **MiniMax** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Groq** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Together AI** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Replicate** | ✅ Full | OpenAI | Bearer Token | OpenAI proxy |
-| **Cohere** | ⚠️ Partial | Custom | Bearer Token | May need adapter |
-| **Mistral AI** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Perplexity** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
-| **Ollama** | ✅ Full | OpenAI | None | Local, no auth |
-| **vLLM** | ✅ Full | OpenAI | None/Custom | Local deployment |
-| **LM Studio** | ✅ Full | OpenAI | None | Local, no auth |
+| Category | Provider | Status | API Format | Auth Method | Notes |
+|----------|----------|--------|------------|-------------|-------|
+| **International** | **OpenAI** | ✅ Full | OpenAI | Bearer Token | Native support |
+| | **Anthropic** | ✅ Full | Custom | x-api-key header | Full request/response conversion |
+| | **AWS Bedrock** | ✅ Full | OpenAI | Bearer Token | Special model naming |
+| | **Azure OpenAI** | ✅ Full | OpenAI | api-key header | API version parameter |
+| | **Google Gemini** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| | **Google Vertex AI** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Chinese LLMs** | **MiniMax** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| | **DeepSeek** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| | **Qwen (Alibaba)** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| | **Baichuan** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| | **Zhipu (GLM)** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| | **Moonshot** | ✅ Full | OpenAI | Bearer Token | OpenAI-compatible |
+| **Local Inference** | **vLLM** | ✅ Full | OpenAI | None | GPU-accelerated |
+| | **Ollama** | ✅ Full | OpenAI | None | Local deployment |
+| | **LM Studio** | ✅ Full | OpenAI | None | Desktop app |
 
-**Summary:** 15/18 providers have full support. 3 providers (Anthropic, Google Gemini, Baidu) have partial support with auto-adapters.
+**Summary:** 15 providers with full support, featuring:
+- ✅ Request/response format conversion (Anthropic)
+- ✅ Auto-detection based on URL patterns
+- ✅ Streaming SSE support for all providers
+- ✅ Special handling for Azure API versions
+- ✅ Complete Chinese LLM ecosystem
+- ✅ Local inference support (vLLM, Ollama, LM Studio)
 
 ### Support Levels
 
@@ -276,8 +314,8 @@ from openai import OpenAI
 
 # Just set proxy environment variables (once per session)
 import os
-os.environ['HTTP_PROXY'] = 'http://localhost:8888'
-os.environ['HTTPS_PROXY'] = 'http://localhost:8888'
+os.environ['HTTP_PROXY'] = 'http://localhost:8801'
+os.environ['HTTPS_PROXY'] = 'http://localhost:8801'
 
 # Use OpenAI normally - no base_url configuration!
 client = OpenAI(api_key="sk-xxx")
@@ -315,7 +353,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="dummy",  # Not used, gateway handles routing
-    base_url="http://localhost:8000/v1"
+    base_url="http://localhost:8001/v1"
 )
 
 response = client.chat.completions.create(
@@ -328,7 +366,7 @@ response = client.chat.completions.create(
 
 ```bash
 # Transparent mode (with proxy)
-export HTTP_PROXY=http://localhost:8888
+export HTTP_PROXY=http://localhost:8801
 curl -X POST https://api.openai.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-xxx" \
@@ -338,7 +376,7 @@ curl -X POST https://api.openai.com/v1/chat/completions \
   }'
 
 # Explicit mode (direct to gateway)
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer dummy" \
   -d '{
@@ -354,7 +392,7 @@ from langchain.chat_models import ChatOpenAI
 import os
 
 # Transparent mode
-os.environ['HTTP_PROXY'] = 'http://localhost:8888'
+os.environ['HTTP_PROXY'] = 'http://localhost:8801'
 llm = ChatOpenAI(
     openai_api_key="sk-xxx",
     model_name="gpt-4o"
@@ -363,7 +401,7 @@ llm = ChatOpenAI(
 # Explicit mode
 llm = ChatOpenAI(
     openai_api_key="dummy",
-    openai_api_base="http://localhost:8000/v1",
+    openai_api_base="http://localhost:8001/v1",
     model_name="gpt-4o"
 )
 ```
@@ -428,10 +466,10 @@ GET  /health                 # Health check
 **Edit/Save via API:**
 ```bash
 # Get current config
-curl http://localhost:8000/api/config
+curl http://localhost:8001/api/config
 
 # Save modified config (creates backup automatically)
-curl -X POST http://localhost:8000/api/config \
+curl -X POST http://localhost:8001/api/config \
   -H "Content-Type: application/json" \
   -d @config.json
 ```
@@ -574,7 +612,7 @@ privacy_guard:
 ### Editing Providers and Routes
 
 **Via Web Dashboard (Recommended):**
-1. Open http://localhost:8000/dashboard
+1. Open http://localhost:8001/dashboard
 2. Click "Edit" button on any provider or route card
 3. Modify configuration in the popup modal
 4. Click "Save Changes" - backup created at `config.yaml.backup`
@@ -618,37 +656,111 @@ python -m pytest tests/test_gateway.py --cov=gateway
 
 ### Transparent Proxy Mode (Recommended)
 
+**Envoy-Style Architecture** (inspired by semantic-router)
+
 ```
 ┌─────────────────┐
-│   Agent/App     │  (Normal LLM SDK - no special config)
-│  OpenAI SDK     │  api.openai.com/v1/chat/completions
+│  Claude Code    │  (Normal LLM SDK - no special config)
+│  Extension      │  api.anthropic.com/v1/messages
 └────────┬────────┘
-         │ HTTP_PROXY=localhost:8888
+         │ HTTP_PROXY=localhost:8801
          ▼
 ┌──────────────────────────────────────────────┐
-│  Transparent Proxy (proxy_server.py:8888)    │
-│  • Detect LLM API domains                    │
-│  • Intercept LLM requests                    │
-│  • Pass through non-LLM traffic              │
+│  mitmproxy Transparent Proxy (:8801)         │
+│  • start_proxy.py                     │
+│  • Intercepts HTTPS traffic                  │
+│  • Certificate-based SSL interception        │
 └────────┬─────────────────────────────────────┘
-         │ Forward to gateway
+         │ Python function call
          ▼
 ┌──────────────────────────────────────────────┐
-│      LLM Routing Gateway (gateway.py:8000)   │
+│  RouterProxyAddon (proxy_addon.py)           │
+│  • Route matching (like ExtProc Filter)      │
+│  • DNS bypass (dns_resolver.py)              │
+│  • Request logging                           │
+│  • Forward to Router                         │
+└────────┬─────────────────────────────────────┘
+         │ Forward to localhost:8001
+         ▼
+┌──────────────────────────────────────────────┐
+│  Router Server (router_server.py:8001)       │
 │  • Load config.yaml                          │
 │  • Match routing rules (keywords, patterns)  │
-│  • Rewrite model name                        │
-│  • Select provider + API key                 │
-│  • Apply Privacy Guard policies              │
+│  • EnhancedLLMClient (15+ providers)         │
+│  • Format conversion (Anthropic, Azure, etc.)│
 │  • Web Dashboard (Vue 3 + Tailwind)          │
 └────────┬─────────────────────────────────────┘
          │
          ├─────► OpenAI API
-         ├─────► DeepSeek API
-         ├─────► Qwen (Alibaba)
-         ├─────► Anthropic API
-         ├─────► Local Ollama
-         └─────► Local vLLM
+         ├─────► Anthropic API (format conversion)
+         ├─────► AWS Bedrock (special auth)
+         ├─────► Azure OpenAI (API version)
+         ├─────► Google Gemini / Vertex AI
+         ├─────► DeepSeek, Qwen, Baichuan, etc.
+         └─────► vLLM, Ollama, LM Studio (local)
+```
+
+**Key Components**:
+
+1. **mitmproxy** - HTTPS interception proxy (like Envoy)
+2. **RouterProxyAddon** - Request processing logic (like ExtProc Filter)
+3. **Router Server** - FastAPI server with enhanced multi-provider support
+4. **EnhancedLLMClient** - Unified client supporting 15+ providers
+
+**Architecture Highlights**:
+- ✅ Zero configuration for client apps (just set HTTP_PROXY)
+- ✅ SSL certificate trust for HTTPS interception
+- ✅ DNS bypass to avoid routing loops
+- ✅ Automatic provider detection and format conversion
+- ✅ Compatible with Claude Code Extension, OpenAI SDK, Anthropic SDK, etc.
+
+### Implementation Details
+
+**Transparent Proxy Implementation** (inspired by [semantic-router](https://github.com/aurelio-labs/semantic-router)):
+
+Our implementation uses **mitmproxy** (Python) instead of Envoy (C++) + ExtProc (Go), providing equivalent functionality:
+
+| Component | semantic-router | AgentOS Router |
+|-----------|----------------|----------------|
+| **Proxy Layer** | Envoy Proxy | mitmproxy |
+| **Processing Logic** | ExtProc Filter (Go) | RouterProxyAddon (Python) |
+| **Request Interception** | gRPC ProcessRequest | `request()` method |
+| **Response Processing** | gRPC ProcessResponse | `response()` method |
+| **Configuration** | Envoy YAML | mitmproxy addon |
+
+**Key Features**:
+
+1. **DNS Bypass** (`dns_resolver.py`)
+   - Resolves real IPs using Google DNS (8.8.8.8)
+   - Prevents routing loops when hosts file is modified
+   - Caches: `api.anthropic.com` → `160.79.104.10`
+
+2. **SSL Certificate Installation**
+   - mitmproxy generates CA certificate on first run
+   - Install to system trust store for HTTPS interception
+   - Location: `~/.mitmproxy/mitmproxy-ca-cert.pem`
+
+3. **Request Processing Flow**
+   - Intercept LLM API requests (Anthropic, OpenAI, etc.)
+   - Forward to Router (localhost:8001) with headers
+   - Router applies routing rules and provider selection
+   - EnhancedLLMClient handles provider-specific format conversion
+
+4. **Provider Auto-Detection**
+   - Based on URL patterns (e.g., `anthropic.com` → `anthropic` type)
+   - Automatic authentication header construction
+   - Format conversion (Anthropic OpenAI ↔ Messages API)
+
+**Startup**:
+```bash
+# Start Router
+python start_router.py  # Port 8001
+
+# Start Proxy (in another terminal)
+python start_proxy.py  # Port 8801
+
+# Or use one-click startup
+start_all.bat
 ```
 
 ### Explicit Proxy Mode
@@ -656,7 +768,7 @@ python -m pytest tests/test_gateway.py --cov=gateway
 ```
 ┌─────────────────┐
 │   Agent/App     │  (Configured with base_url)
-│  OpenAI SDK     │  base_url="http://localhost:8000/v1"
+│  OpenAI SDK     │  base_url="http://localhost:8001/v1"
 └────────┬────────┘
          │
          ▼
@@ -687,13 +799,16 @@ All documentation is consolidated in this README. See CLAUDE.md for project-spec
 **Proxy not intercepting requests:**
 - Check proxy is running: `netstat -an | findstr 8888` (Windows) or `lsof -i :8888` (Mac/Linux)
 - Verify environment variables are set: `echo %HTTP_PROXY%` (Windows) or `echo $HTTP_PROXY` (Mac/Linux)
-- Check gateway is running: `curl http://localhost:8000/health`
+- Check gateway is running: `curl http://localhost:8001/health`
 - Review proxy logs for interception messages
 
 **HTTPS interception not working:**
-- For now, use HTTP_PROXY environment variable (apps must respect proxy settings)
-- Full HTTPS MITM requires SSL certificate (coming in future version)
-- Workaround: Most LLM SDKs respect HTTP_PROXY for HTTPS requests
+- mitmproxy requires SSL certificate installation for HTTPS interception
+- Certificate location: `~/.mitmproxy/mitmproxy-ca-cert.pem` (auto-generated on first run)
+- **Windows**: Right-click cert → Install → "Trusted Root Certification Authorities"
+- **PowerShell (admin)**: `Import-Certificate -FilePath ~/.mitmproxy/mitmproxy-ca-cert.pem -CertStoreLocation Cert:\LocalMachine\Root`
+- **After install**: Restart VS Code / IDE to pick up new certificates
+- **Verify**: Open `certmgr.msc` → Trusted Root → look for "mitmproxy"
 
 **Requests not in gateway logs:**
 - Transparent proxy forwards to gateway - check both proxy and gateway logs
@@ -719,8 +834,8 @@ All documentation is consolidated in this README. See CLAUDE.md for project-spec
 
 **Dashboard not loading:**
 - Ensure `web/index.html` exists
-- Check gateway is running: `curl http://localhost:8000/health`
-- Try direct URL: http://localhost:8000/dashboard
+- Check gateway is running: `curl http://localhost:8001/health`
+- Try direct URL: http://localhost:8001/dashboard
 
 ## 🔧 Proxy Setup for Different Network Environments
 
@@ -730,12 +845,12 @@ All documentation is consolidated in this README. See CLAUDE.md for project-spec
 
 ```bash
 # Windows (CMD)
-set HTTP_PROXY=http://localhost:8888
-set HTTPS_PROXY=http://localhost:8888
+set HTTP_PROXY=http://localhost:8801
+set HTTPS_PROXY=http://localhost:8801
 
 # Linux/Mac
-export HTTP_PROXY=http://localhost:8888
-export HTTPS_PROXY=http://localhost:8888
+export HTTP_PROXY=http://localhost:8801
+export HTTPS_PROXY=http://localhost:8801
 ```
 
 ### Scenario 2: Machine WITH Corporate Proxy
@@ -761,8 +876,8 @@ python proxy_server.py
 
 **Step 2: Set your app to use our proxy**
 ```bash
-set HTTP_PROXY=http://localhost:8888
-set HTTPS_PROXY=http://localhost:8888
+set HTTP_PROXY=http://localhost:8801
+set HTTPS_PROXY=http://localhost:8801
 ```
 
 **Result:**
@@ -775,8 +890,8 @@ Keep system proxy unchanged, set proxy only in LLM app code:
 
 ```python
 import os
-os.environ['HTTP_PROXY'] = 'http://localhost:8888'
-os.environ['HTTPS_PROXY'] = 'http://localhost:8888'
+os.environ['HTTP_PROXY'] = 'http://localhost:8801'
+os.environ['HTTPS_PROXY'] = 'http://localhost:8801'
 
 from openai import OpenAI
 client = OpenAI(api_key="sk-xxx")
@@ -791,7 +906,7 @@ Skip proxy entirely, use direct gateway URL:
 from openai import OpenAI
 client = OpenAI(
     api_key="dummy",
-    base_url="http://localhost:8000/v1"
+    base_url="http://localhost:8001/v1"
 )
 # No proxy confusion, simple and explicit
 ```
@@ -867,7 +982,7 @@ See [Proxy Setup for Different Network Environments](#-proxy-setup-for-different
 **Quick answer:**
 1. Edit `proxy_server.py`: Set `UPSTREAM_PROXY = "http://proxy.company.com:8080"`
 2. Start services: `start_transparent_mode.bat`
-3. Set proxy: `set HTTP_PROXY=http://localhost:8888`
+3. Set proxy: `set HTTP_PROXY=http://localhost:8801`
 4. Run your app - LLM requests intercepted, other traffic goes through corporate proxy!
 
 ### Non-LLM traffic (pip, git) fails when using transparent proxy
@@ -906,7 +1021,7 @@ MIT
 **Need help?** Open an issue on GitHub or check the logs for detailed error messages.
 
 **Quick Links:**
-- Dashboard: http://localhost:8000/dashboard
-- Health Check: http://localhost:8000/health
-- API Docs: http://localhost:8000/docs (FastAPI auto-generated)
-- Proxy Server: http://localhost:8888 (transparent mode)
+- Dashboard: http://localhost:8001/dashboard
+- Health Check: http://localhost:8001/health
+- API Docs: http://localhost:8001/docs (FastAPI auto-generated)
+- Proxy Server: http://localhost:8801 (transparent mode)

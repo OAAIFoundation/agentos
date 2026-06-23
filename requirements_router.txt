@@ -1,0 +1,67 @@
+# Router Server Dependencies
+# 基于 vLLM Semantic Router 架构的简化版路由系统
+
+# ======================== Core Dependencies ========================
+
+# FastAPI - Web framework (类似 semantic-router 的 Go HTTP server)
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+
+# HTTP Client - 统一的 LLM 客户端
+httpx>=0.28.1
+
+# Configuration - YAML 配置加载
+pyyaml>=6.0.2
+
+# Data Validation - Pydantic models
+pydantic>=2.10.5
+
+# ======================== Optional Dependencies ========================
+
+# OpenAI SDK - 用于测试和示例
+openai>=1.59.6
+
+# Anthropic SDK - Claude 支持
+anthropic>=0.42.0
+
+# ======================== Agent Framework Support ========================
+
+# LangChain - Agent 框架
+langchain>=0.3.15
+langchain-openai>=0.2.15
+langchain-community>=0.3.15
+
+# LlamaIndex - RAG 框架
+llama-index>=0.12.10
+
+# CrewAI - Multi-Agent 框架
+crewai>=0.86.0
+
+# ======================== Privacy Guard (可选) ========================
+
+# 如果需要集成 privacy_guard.py，需要以下依赖:
+# Pillow>=11.1.0              # 图像处理
+# pytesseract>=0.3.14         # OCR
+# faker>=34.2.0               # 假名生成
+
+# ======================== Future Features (暂不需要) ========================
+
+# 以下是 semantic-router 使用的依赖，我们暂时不需要:
+#
+# 信号分类器:
+# - transformers>=4.46.3      # NLP 模型
+# - torch>=2.5.1              # 深度学习
+# - sentence-transformers     # 语义嵌入
+#
+# 向量数据库 (语义缓存):
+# - pymilvus>=2.4.3           # Milvus 客户端
+# - redis>=5.2.0              # Redis 客户端
+# - qdrant-client>=1.12.1     # Qdrant 客户端
+#
+# 监控追踪:
+# - prometheus-client>=0.21.1 # Prometheus metrics
+# - opentelemetry-api         # OpenTelemetry 追踪
+#
+# 数据库 (会话记忆):
+# - psycopg2-binary>=2.9.10   # PostgreSQL
+# - sqlalchemy>=2.0.39        # ORM
