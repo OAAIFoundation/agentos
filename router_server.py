@@ -97,7 +97,8 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing Enhanced LLM client (支持所有 semantic-router provider 类型)")
         # No upstream proxy needed - direct internet access
         logger.info("Using direct connection (no upstream proxy)")
-        llm_client = LLMClient(timeout=300.0, upstream_proxy=None)
+        # Use 5 second timeout for fast feedback in dashboard testing
+        llm_client = LLMClient(timeout=5.0, upstream_proxy=None)
 
         # Initialize privacy guard (if available and enabled)
         if PRIVACY_GUARD_AVAILABLE and router_config.privacy_guard.enabled:
@@ -302,6 +303,16 @@ async def get_logs(level: str = "all", limit: int = 100):
 
     # Return most recent logs (up to limit)
     return {"logs": all_logs[:limit]}
+
+
+@app.post("/api/logs/clear")
+async def clear_logs():
+    """Clear in-memory logs (file logs preserved)"""
+    global request_logs
+    count = len(request_logs)
+    request_logs = []
+    logger.info(f"Cleared {count} in-memory logs")
+    return {"status": "ok", "cleared": count}
 
 
 # ======================== Chat Completion Endpoint ========================
