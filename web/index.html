@@ -401,7 +401,7 @@
             </div>
 
             <!-- Right Content Area -->
-            <div class="flex-1 overflow-y-auto custom-scrollbar h-screen">
+            <div ref="contentArea" class="flex-1 overflow-y-auto custom-scrollbar h-screen">
                 <div class="max-w-4xl mx-auto px-12 py-8">
 
                     <!-- Overview Page -->
@@ -1245,6 +1245,7 @@ response = client.chat.completions.create(
                     customEndDate: '',
                     chartGranularity: 'daily',
                     chartBreakdown: 'day',
+                    chartUpdateTimer: null,  // Debounce timer for chart updates
                     navSections: [
                         {
                             id: 'overview',
@@ -1359,17 +1360,30 @@ response = client.chat.completions.create(
             },
             watch: {
                 activePage(newPage) {
+                    // Scroll to top when switching pages
+                    // Scroll both window and content area (in case of nested scrolling)
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    if (this.$refs.contentArea) {
+                        this.$refs.contentArea.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+
                     if (newPage === 'test') {
                         this.startLogRefresh();
                     } else if (newPage === 'overview') {
                         // Refresh chart when switching to overview
-                        this.$nextTick(() => {
-                            if (!this.usageChart) {
+                        // Wait for scroll animation to complete before updating chart
+                        setTimeout(() => {
+                            this.$nextTick(() => {
+                                // Destroy existing chart if it exists
+                                if (this.usageChart) {
+                                    console.log('Destroying existing chart...');
+                                    this.usageChart.destroy();
+                                    this.usageChart = null;
+                                }
+                                // Always reinitialize chart when switching to overview
                                 this.initChart();
-                            } else {
-                                this.updateChartData();
-                            }
-                        });
+                            });
+                        }, 300);  // Increased delay to ensure scroll completes
                     }
                 },
                 logLevel() {
@@ -1771,7 +1785,24 @@ response = client.chat.completions.create(
                         return;
                     }
 
-                    console.log('Updating chart data...');
+                    // Debounce: clear any pending update
+                    if (this.chartUpdateTimer) {
+                        clearTimeout(this.chartUpdateTimer);
+                    }
+
+                    // Delay update slightly to avoid rapid successive updates
+                    this.chartUpdateTimer = setTimeout(async () => {
+                        console.log('Updating chart data...');
+                        await this._performChartUpdate();
+                    }, 50);
+                },
+
+                async _performChartUpdate() {
+                    if (!this.usageChart) {
+                        console.warn('Chart not initialized during update');
+                        return;
+                    }
+
                     // Calculate date range
                     const now = new Date();
                     let startDate, endDate;
@@ -1820,9 +1851,12 @@ response = client.chat.completions.create(
                         });
 
                         // Update chart
+                        if (aggregated.labels.length === 0 || aggregated.datasets.length === 0) {
+                            console.warn('No data to display in chart');
+                        }
                         this.usageChart.data.labels = aggregated.labels;
                         this.usageChart.data.datasets = aggregated.datasets;
-                        this.usageChart.update();
+                        this.usageChart.update('active');
                     } catch (error) {
                         console.error('Failed to update chart:', error);
                     }
@@ -1831,6 +1865,13 @@ response = client.chat.completions.create(
                 aggregateLogData(logs, startDate, endDate) {
                     const labels = [];
                     const dataMap = {};
+
+                    console.log('Aggregate params:', {
+                        startDate: startDate.toISOString(),
+                        endDate: endDate.toISOString(),
+                        granularity: this.chartGranularity,
+                        logs: logs.length
+                    });
 
                     // Generate time buckets
                     if (this.chartGranularity === 'hourly') {
